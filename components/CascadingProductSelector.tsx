@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
 import { toast } from 'sonner';
+import { Search } from 'lucide-react';
 import { toBengaliDigits, toEnglishDigits, formatProductName } from '@/lib/bengaliUtils';
 
 export interface ProductInventoryItem {
@@ -26,7 +27,7 @@ export interface ProductInventoryItem {
 export interface SelectedProductDetails {
   productId?: string;
   name: string;
-  category: 'রড' | 'সিমেন্ট' | 'রিং' | 'অন্যান্য';
+  category: string;
   mmSize?: string;
   brand?: string;
   cementType?: 'OPC' | 'PCC' | '';
@@ -68,7 +69,7 @@ interface CascadingProductSelectorProps {
   buttonLabel?: string;
   className?: string;
   purchaseType?: 'rod' | 'cement';
-  allowedCategories?: ('রড' | 'সিমেন্ট' | 'রিং' | 'অন্যান্য')[];
+  allowedCategories?: string[];
 }
 
 const ROD_MM_OPTIONS = [
@@ -184,19 +185,33 @@ export function CascadingProductSelector({
     }
   }
 
-  const categoriesToDisplay = useMemo<('রড' | 'সিমেন্ট' | 'রিং' | 'অন্যান্য')[]>(() => {
+  const categoriesToDisplay = useMemo<string[]>(() => {
     if (allowedCategories && allowedCategories.length > 0) return allowedCategories;
     if (purchaseType === 'rod') return ['রড', 'রিং'];
     if (purchaseType === 'cement') return ['সিমেন্ট'];
-    return ['রড', 'সিমেন্ট', 'রিং', 'অন্যান্য'];
-  }, [allowedCategories, purchaseType]);
 
-  const initialCategory = categoriesToDisplay[0] || 'রড';
-  const [categoryState, setCategoryState] = useState<'রড' | 'সিমেন্ট' | 'রিং' | 'অন্যান্য'>(initialCategory);
+    const hasRod = products.some(p => (p.category || '').includes('রড') || p.name.includes('রড') || (p.brand && ['bsrm', 'scrm'].includes(p.brand.toLowerCase())));
+    const hasCement = products.some(p => (p.category || '').includes('সিমেন্ট') || p.name.includes('সিমেন্ট') || (p.brand && ['holcim', 'king'].includes(p.brand.toLowerCase())));
+    const customCats = Array.from(new Set(products.map(p => (p.category || '').trim()).filter(Boolean))) as string[];
+
+    if (!hasRod && !hasCement) {
+      if (customCats.length > 0) {
+        return ['সব পণ্য', ...customCats.filter(c => c !== 'সব পণ্য')];
+      }
+      return ['সব পণ্য'];
+    }
+
+    return Array.from(new Set(['রড', 'সিমেন্ট', 'রিং', ...customCats, 'অন্যান্য']));
+  }, [allowedCategories, purchaseType, products]);
+
+  const initialCategory = categoriesToDisplay[0] || 'সব পণ্য';
+  const [categoryState, setCategoryState] = useState<string>(initialCategory);
 
   const category = categoriesToDisplay.includes(categoryState)
     ? categoryState
     : initialCategory;
+
+  const [generalSearch, setGeneralSearch] = useState<string>('');
 
   const [selectedMm, setSelectedMm] = useState<string>(
     initialCategory === 'রিং' ? '3-3' : initialCategory === 'সিমেন্ট' ? '' : '১০ মিলি'
@@ -356,8 +371,9 @@ export function CascadingProductSelector({
   }, [onlyInStock, inStockProducts]);
 
   // Handle Category Switch & defaults
-  const handleCategorySelect = useCallback((cat: 'রড' | 'সিমেন্ট' | 'রিং' | 'অন্যান্য') => {
+  const handleCategorySelect = useCallback((cat: string) => {
     setCategoryState(cat);
+    setGeneralSearch('');
     if (cat === 'রড') {
       const defaultBrand = onlyInStock ? (availableRodBrands[0] || '') : 'BSRM';
       const defaultMm = onlyInStock ? (availableRodMms[0] || '') : '১০ মিলি';
@@ -490,8 +506,9 @@ export function CascadingProductSelector({
   const matchedProductInfo = useMemo(() => {
     const isPurchaseMode = showSellPriceField;
     const searchPool = onlyInStock ? inStockProducts : products;
+    const isGeneralCategory = category !== 'রড' && category !== 'সিমেন্ট' && category !== 'রিং';
 
-    if (category === 'অন্যান্য') {
+    if (isGeneralCategory) {
       if (otherProductId) {
         const found = searchPool.find(p => p.id === otherProductId);
         if (found) {
@@ -509,7 +526,7 @@ export function CascadingProductSelector({
       }
       return {
         productId: undefined,
-        name: customName || 'অন্যান্য পণ্য',
+        name: customName || '',
         price: 0,
         sellPrice: 0,
         unit: 'পিস',
@@ -656,6 +673,24 @@ export function CascadingProductSelector({
     };
   }, [category, activeMm, activeBrand, otherProductId, customName, onlyInStock, inStockProducts, products, showSellPriceField, effectiveEnableCementType, effectiveCementType]);
 
+  const isGeneralCategory = category !== 'রড' && category !== 'সিমেন্ট' && category !== 'রিং';
+
+  const filteredGeneralProducts = useMemo(() => {
+    let pool = onlyInStock ? inStockProducts : products;
+    if (category !== 'সব পণ্য' && category !== 'অন্যান্য') {
+      pool = pool.filter(p => (p.category || '').toLowerCase() === category.toLowerCase());
+    }
+    if (generalSearch.trim()) {
+      const q = generalSearch.toLowerCase().trim();
+      pool = pool.filter(p => 
+        p.name.toLowerCase().includes(q) || 
+        (p.brand && p.brand.toLowerCase().includes(q)) ||
+        (p.code && p.code.toLowerCase().includes(q))
+      );
+    }
+    return pool;
+  }, [products, inStockProducts, onlyInStock, category, generalSearch]);
+
   // Sync state up to parent when selection changes
   useEffect(() => {
     onProductChange({
@@ -698,11 +733,7 @@ export function CascadingProductSelector({
           )}
         </Label>
         
-        <div className={cn("grid gap-2", 
-          categoriesToDisplay.length === 1 ? "grid-cols-1 sm:grid-cols-2" :
-          categoriesToDisplay.length === 2 ? "grid-cols-2" :
-          "grid-cols-2 sm:grid-cols-4"
-        )}>
+        <div className="flex flex-wrap gap-2">
           {categoriesToDisplay.map((cat) => {
             const isSelected = category === cat;
             return (
@@ -711,16 +742,18 @@ export function CascadingProductSelector({
                 type="button"
                 onClick={() => handleCategorySelect(cat)}
                 className={cn(
-                  'py-2.5 px-3 rounded-xl font-black text-xs transition-all border flex items-center justify-center gap-1.5',
+                  'py-2 px-3.5 rounded-xl font-black text-xs transition-all border flex items-center justify-center gap-1.5 cursor-pointer',
                   isSelected
-                    ? 'bg-gradient-to-r from-[#b88e2d] to-[#d4af37] text-white border-[#8c6b1c] shadow-md shadow-amber-500/20 scale-[1.02]'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-[#fbf9f5]'
+                    ? 'bg-gradient-to-r from-orange-600 to-amber-600 text-white border-orange-700 shadow-md shadow-orange-500/20 scale-[1.02]'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100/80 hover:border-slate-300'
                 )}
               >
                 {cat === 'রড' && '🏗️'}
                 {cat === 'সিমেন্ট' && '🧱'}
                 {cat === 'রিং' && '⭕'}
                 {cat === 'অন্যান্য' && '📦'}
+                {cat === 'সব পণ্য' && '🛒'}
+                {!['রড', 'সিমেন্ট', 'রিং', 'অন্যান্য', 'সব পণ্য'].includes(cat) && '🏷️'}
                 <span>{cat}</span>
               </button>
             );
@@ -988,33 +1021,73 @@ export function CascadingProductSelector({
 
 
 
-        {/* OTHERS FLOW: Existing Product Select */}
-        {category === 'অন্যান্য' && (
-          <div className="sm:col-span-12 space-y-1">
-            <Label className="text-[11px] font-bold text-slate-600">পণ্য নির্বাচন করুন</Label>
-            <Select 
-              value={otherProductId} 
-              onValueChange={(val: string | null) => {
-                const v = val || '';
-                setOtherProductId(v);
-                const match = products.find(p => p.id === v);
-                if (match && autoLoadPrice) {
-                  if (showPriceField) onPriceChange(match.buyPrice || match.sellPrice || 0);
-                  if (showSellPriceField && onSellPriceChange) onSellPriceChange(match.sellPrice || 0);
-                }
-              }}
-            >
-              <SelectTrigger className="rounded-xl h-10 bg-white border-slate-200 text-xs font-bold">
-                <SelectValue placeholder="পণ্য নির্বাচন করুন..." />
-              </SelectTrigger>
-              <SelectContent className="font-bengali text-xs font-bold max-h-60">
-                {(onlyInStock ? products.filter(p => (p.stock || 0) > 0) : products).map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name} {p.sellPrice ? `— ৳${p.sellPrice}/${p.unit || 'পিস'}` : ''} (স্টক: {p.stock || 0} {p.unit || 'পিস'})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        {/* GENERAL & OTHER CATEGORIES FLOW: Searchable Product Select */}
+        {isGeneralCategory && (
+          <div className="sm:col-span-12 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-[11px] font-bold text-slate-700">২. পণ্য নির্বাচন করুন</Label>
+              {onlyInStock && (
+                <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  শুধুমাত্র স্টকে থাকা পণ্য দেখানো হচ্ছে
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+              <div className="sm:col-span-4 relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <Input
+                  placeholder="নাম বা কোড লিখে ফিল্টার করুন..."
+                  value={generalSearch}
+                  onChange={e => setGeneralSearch(e.target.value)}
+                  className="pl-8 h-10 text-xs font-bengali rounded-xl bg-white border-slate-200"
+                />
+              </div>
+
+              <div className="sm:col-span-8">
+                <Select
+                  value={otherProductId}
+                  onValueChange={(val: string | null) => {
+                    const v = val || '';
+                    setOtherProductId(v);
+                    const match = products.find(p => p.id === v);
+                    if (match) {
+                      if (onUnitChange && match.unit) onUnitChange(match.unit);
+                      const priceToSet = isPurchaseMode ? (match.buyPrice || match.sellPrice || 0) : (match.sellPrice || 0);
+                      onPriceChange(priceToSet);
+                      if (showSellPriceField && onSellPriceChange) onSellPriceChange(match.sellPrice || 0);
+                      if (showAlertLimitField && onAlertLimitChange) onAlertLimitChange(match.alertThreshold || 5);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="rounded-xl h-10 bg-white border-slate-200 text-xs font-bold font-bengali">
+                    <SelectValue placeholder="ড্রপডাউন থেকে পণ্য নির্বাচন করুন..." />
+                  </SelectTrigger>
+                  <SelectContent className="font-bengali text-xs font-bold max-h-60">
+                    {filteredGeneralProducts.length === 0 ? (
+                      <SelectItem value="_empty" disabled>
+                        {onlyInStock ? 'স্টকে কোনো পণ্য পাওয়া যায়নি' : 'কোনো পণ্য পাওয়া যায়নি'}
+                      </SelectItem>
+                    ) : (
+                      filteredGeneralProducts.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          <span className="font-bold">{p.name}</span>
+                          {p.brand ? <span className="text-slate-400 font-normal"> ({p.brand})</span> : ''}
+                          <span className="text-emerald-700 ml-2 font-bold">
+                            {isPurchaseMode 
+                              ? `— কেনা: ৳${p.buyPrice || 0}/${p.unit || 'পিস'}` 
+                              : `— বিক্রয়: ৳${p.sellPrice || 0}/${p.unit || 'পিস'}`}
+                          </span>
+                          <span className="text-slate-500 ml-2 font-normal">
+                            [স্টক: {toBengaliDigits(p.stock || 0)} {p.unit || 'পিস'}]
+                          </span>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
         )}
       </div>

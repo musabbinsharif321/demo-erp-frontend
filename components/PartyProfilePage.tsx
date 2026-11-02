@@ -663,6 +663,10 @@ export default function PartyProfilePage({ id, type }: { id: string; type: 'cust
   const [ledgerSearch, setLedgerSearch] = useState('');
   const [selectedInvoiceTx, setSelectedInvoiceTx] = useState<TransactionDoc | null>(null);
 
+  const hasRodOrCement = useMemo(() => {
+    return transactions.some(t => t.items?.some(isRodItem) || t.items?.some(isCementItem));
+  }, [transactions]);
+
   // Customer Sites State
   const [customerSites, setCustomerSites] = useState<any[]>([]);
   const [selectedSite, setSelectedSite] = useState<string>('all');
@@ -1958,25 +1962,27 @@ export default function PartyProfilePage({ id, type }: { id: string; type: 'cust
                     </Select>
                   </div>
 
-                  {/* 3. Category Filter Select (রড ও সিমেন্ট ফিল্টার) */}
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
-                      <Filter className="w-3 h-3 text-slate-400" />
-                      পণ্য ফিল্টার
-                    </span>
-                    <Select value={categoryFilter} onValueChange={(val: any) => setCategoryFilter(val || 'all')}>
-                      <SelectTrigger className="w-32 sm:w-36 h-9 bg-white border-slate-200 rounded-xl text-xs font-bold text-slate-800">
-                        <span className="truncate">
-                          {categoryFilter === 'rod' ? '🔹 শুধু রড' : categoryFilter === 'cement' ? '🔸 শুধু সিমেন্ট' : '📦 সব পণ্য'}
-                        </span>
-                      </SelectTrigger>
-                      <SelectContent className="font-bengali text-xs">
-                        <SelectItem value="all">📦 সব পণ্য</SelectItem>
-                        <SelectItem value="rod">🔹 শুধু রড</SelectItem>
-                        <SelectItem value="cement">🔸 শুধু সিমেন্ট</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {/* 3. Category Filter Select (রড ও সিমেন্ট ফিল্টার - শুধুমাত্র রড/সিমেন্ট লেনদেন থাকলে প্রদর্শিত হবে) */}
+                  {hasRodOrCement && (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                        <Filter className="w-3 h-3 text-slate-400" />
+                        পণ্য ফিল্টার
+                      </span>
+                      <Select value={categoryFilter} onValueChange={(val: any) => setCategoryFilter(val || 'all')}>
+                        <SelectTrigger className="w-32 sm:w-36 h-9 bg-white border-slate-200 rounded-xl text-xs font-bold text-slate-800">
+                          <span className="truncate">
+                            {categoryFilter === 'rod' ? '🔹 শুধু রড' : categoryFilter === 'cement' ? '🔸 শুধু সিমেন্ট' : '📦 সব পণ্য'}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent className="font-bengali text-xs">
+                          <SelectItem value="all">📦 সব পণ্য</SelectItem>
+                          <SelectItem value="rod">🔹 শুধু রড</SelectItem>
+                          <SelectItem value="cement">🔸 শুধু সিমেন্ট</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                   {/* 4. Site Filter Select for Customers */}
                   {isCustomer && (

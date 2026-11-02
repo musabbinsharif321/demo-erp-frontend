@@ -77,24 +77,23 @@ interface OrderItem {
 export const isCementProduct = (item?: { name?: string; unit?: string; category?: string } | null): boolean => {
   if (!item) return false;
   const n = (item.name || '').toLowerCase();
-  const u = (item.unit || '').toLowerCase();
   const c = ((item as any).category || '').toLowerCase();
 
-  if (u.includes('বস্তা') || u.includes('ব্যাগ') || u.includes('bag')) return true;
+  // Explicit category check
   if (c.includes('সিমেন্ট') || c.includes('cement')) return true;
 
+  // Name check for cement or explicit cement brand names
   return (
     n.includes('সিমেন্ট') || n.includes('cement') ||
     n.includes('হোলসিম') || n.includes('holcim') ||
-    n.includes('কোস্টাল') || n.includes('coastal') ||
+    n.includes('কোস্টাল সিমেন্ট') ||
     n.includes('সুপারক্রিট') || n.includes('supercrete') ||
-    n.includes('কিং ব্র্যান্ড') || n.includes('king') ||
-    n.includes('অ্যাংকর') || n.includes('anchor') ||
-    n.includes('আকিজ') || n.includes('akij') ||
-    n.includes('শাহ') || n.includes('shah') ||
+    n.includes('কিং ব্র্যান্ড সিমেন্ট') ||
+    n.includes('অ্যাংকর সিমেন্ট') || n.includes('anchor cement') ||
+    n.includes('আকিজ সিমেন্ট') ||
+    n.includes('শাহ সিমেন্ট') ||
     n.includes('সেভেন রিংস') || n.includes('seven rings') ||
-    n.includes('স্ট্রং স্ট্রাকচার') ||
-    n.includes('pcc') || n.includes('opc')
+    n.includes('pcc সিমেন্ট') || n.includes('opc সিমেন্ট')
   );
 };
 
@@ -104,26 +103,22 @@ export const isRodProduct = (item?: { name?: string; unit?: string; category?: s
   if (isCementProduct(item)) return false;
 
   const n = (item.name || '').toLowerCase();
-  const u = (item.unit || '').toLowerCase();
   const c = ((item as any).category || '').toLowerCase();
 
-  if (u.includes('কেজি') || u.includes('টন') || u.includes('kg') || u.includes('ton')) return true;
+  // Explicit category check
   if (c.includes('রড') || c.includes('rod') || c.includes('রিং') || c.includes('ring')) return true;
 
+  // Name check specifically for steel/rod items
   return (
     n.includes('রড') || n.includes('rod') ||
-    n.includes('মিমি') || n.includes('মি.মি') || n.includes('মিলি') || n.includes('মি.লি') || n.includes('mm') ||
-    n.includes('রিং') || n.includes('ring') ||
     n.includes('বিএসআরএম') || n.includes('bsrm') ||
     n.includes('এসসিআরএম') || n.includes('scrm') ||
     n.includes('কেএসএমএল') || n.includes('ksml') ||
-    n.includes('এফএসএল') || n.includes('fsl') ||
     n.includes('ডিএসআরএম') || n.includes('dsrm') ||
     n.includes('থার্মেক্স') || n.includes('thermax') ||
     n.includes('এইচকেজি') || n.includes('hkg') ||
-    n.includes('আইআরএমএল') || n.includes('irml') || n.includes('আইআরএল') ||
-    n.includes('সুতা') || n.includes('সূতা') ||
-    n.includes('তার') || n.includes('wire')
+    n.includes('আইআরএমএল') || n.includes('irml') ||
+    ((n.includes('মিমি') || n.includes('মি.মি') || n.includes('mm')) && (n.includes('স্টিল') || n.includes('steel') || n.includes('বার') || n.includes('rebar') || n.includes('গ্রেড')))
   );
 };
 

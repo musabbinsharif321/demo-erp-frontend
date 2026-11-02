@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { toast } from 'sonner';
 import { toBengaliDigits, formatProductName } from '@/lib/bengaliUtils';
 import { CustomerSearchSelect } from '@/components/CustomerSearchSelect';
+import { ProductSearchSelect, ProductOption } from '@/components/ProductSearchSelect';
 import { CascadingProductSelector, SelectedProductDetails } from '@/components/CascadingProductSelector';
 import { ReturnInvoiceMemo } from '@/components/ReturnInvoiceMemo';
 import { SalesReturnDetailsView } from '@/components/SalesReturnDetailsView';
@@ -68,6 +69,9 @@ interface Product {
   sellPrice: number;
   stock: number;
   unit: string;
+  category?: string;
+  brand?: string;
+  code?: string;
 }
 
 interface Customer {
@@ -127,6 +131,7 @@ export default function SalesReturnsPage() {
   const [itemCondition, setItemCondition] = useState<'good' | 'damaged'>('good');
 
   // New Taken / Exchange Selector Helpers
+  const [selectedExchangeProduct, setSelectedExchangeProduct] = useState<ProductOption | null>(null);
   const [selectedCascadingNewProduct, setSelectedCascadingNewProduct] = useState<SelectedProductDetails | null>(null);
   const [newProdId, setNewProdId] = useState('');
   const [newQty, setNewQty] = useState(1);
@@ -434,10 +439,13 @@ export default function SalesReturnsPage() {
       const prodList = await api.inventory.list();
       setProducts(prodList.map(p => ({
         id: String(p.id),
-        name: formatProductName(p.name, p.category_name),
+        name: p.name,
         sellPrice: Number(p.sell_price || 0),
         stock: Number(p.stock || 0),
-        unit: p.unit || 'পিস'
+        unit: p.unit || 'পিস',
+        category: p.category_name || 'সাধারণ',
+        brand: p.brand || '',
+        code: p.sku || ''
       })));
     } catch (err) {
       console.error('Error loading returns data:', err);
@@ -492,23 +500,22 @@ export default function SalesReturnsPage() {
 
   // Add Item to New Taken Items Cart
   const handleAddNewItem = () => {
-    const itemName = selectedCascadingNewProduct?.name || products.find(p => p.id === newProdId)?.name;
+    const itemName = selectedExchangeProduct?.name || selectedCascadingNewProduct?.name || products.find(p => p.id === newProdId)?.name;
     if (!itemName) {
       toast.error('নতুন নেওয়া পণ্য নির্বাচন করুন');
       return;
     }
 
-    const itemUnitToUse = selectedCascadingNewProduct?.unit || products.find(p => p.id === newProdId)?.unit || 'পিস';
-    const itemId = String(selectedCascadingNewProduct?.productId || newProdId || `new-${newTakenCart.length + 1}`);
-    const finalPrice = newPrice || selectedCascadingNewProduct?.price || 0;
+    const itemUnitToUse = selectedExchangeProduct?.unit || selectedCascadingNewProduct?.unit || products.find(p => p.id === newProdId)?.unit || 'পিস';
+    const itemId = String(selectedExchangeProduct?.id || selectedCascadingNewProduct?.productId || newProdId || `new-${newTakenCart.length + 1}`);
+    const finalPrice = newPrice || selectedExchangeProduct?.sellPrice || selectedCascadingNewProduct?.price || 0;
 
-    const stockAvailable = selectedCascadingNewProduct?.stock ?? products.find(p => p.id === newProdId)?.stock ?? 99999;
+    const stockAvailable = Number(selectedExchangeProduct?.stock ?? selectedCascadingNewProduct?.stock ?? products.find(p => p.id === newProdId)?.stock ?? 99999);
     if (newQty > stockAvailable) {
-      toast.error(`স্টকে পর্যাপ্ত পণ্য নেই (মজুদ: ${stockAvailable})`);
-      return;
+      toast.warning(`স্টকে পর্যাপ্ত পণ্য নেই (মজুদ: ${stockAvailable})। যুক্ত করা হয়েছে।`);
     }
 
-    const existingIdx = newTakenCart.findIndex(i => i.name === itemName);
+    const existingIdx = newTakenCart.findIndex(i => i.name === itemName || String(i.id) === itemId);
     if (existingIdx > -1) {
       const updated = [...newTakenCart];
       updated[existingIdx].quantity += newQty;
@@ -523,6 +530,8 @@ export default function SalesReturnsPage() {
         unit: itemUnitToUse
       }]);
     }
+    setSelectedExchangeProduct(null);
+    setSelectedCascadingNewProduct(null);
     setNewProdId('');
     setNewQty(1);
     setNewPrice(0);
@@ -1587,25 +1596,101 @@ export default function SalesReturnsPage() {
                         </span>
                       </div>
 
-                      {/* Cascading Item Line Selector */}
-                      <CascadingProductSelector
-                        products={products}
-                        onlyInStock={true}
-                        onProductChange={(selected) => {
-                          setSelectedCascadingNewProduct(selected);
-                          if (selected) {
-                            setNewProdId(selected.productId || '');
-                          }
-                        }}
-                        showPriceField={true}
-                        priceLabel="বিক্রয়/নতুন একক দর (৳)"
-                        itemPrice={newPrice}
-                        onPriceChange={setNewPrice}
-                        itemQty={newQty}
-                        onQtyChange={setNewQty}
-                        onAddCartItem={handleAddNewItem}
-                        buttonLabel="+ নতুন যোগ করুন"
-                      />
+                      {/* Unified Single-Field Product Selector (Search + Dropdown combined) */}
+                      <div className="bg-slate-50/90 border border-slate-200/90 rounded-lg p-3 sm:p-4 space-y-3 font-bengali shadow-xs">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                          {/* 1. Single Input Field (Dropdown + Search) */}
+                          <div className="md:col-span-5 space-y-1.5">
+                            <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                              <span>পণ্য নির্বাচন করুন <span className="text-rose-500">*</span></span>
+                              {selectedExchangeProduct && (
+                                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                  মজুদ স্টক: {toBengaliDigits(selectedExchangeProduct.stock ?? 0)} {selectedExchangeProduct.unit || 'পিস'}
+                                </span>
+                              )}
+                            </Label>
+                            <ProductSearchSelect
+                              products={products as any}
+                              selectedProduct={selectedExchangeProduct}
+                              onSelectProduct={(prod) => {
+                                setSelectedExchangeProduct(prod);
+                                if (prod) {
+                                  setNewProdId(prod.id);
+                                  setNewPrice(prod.sellPrice || 0);
+                                } else {
+                                  setNewProdId('');
+                                  setNewPrice(0);
+                                }
+                              }}
+                              placeholder="পণ্য সার্চ করুন বা ড্রপডাউনে ক্লিক করুন..."
+                              onlyInStock={false}
+                            />
+                          </div>
+
+                          {/* 2. Quantity Input */}
+                          <div className="md:col-span-2 space-y-1.5">
+                            <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                              <span>পরিমাণ <span className="text-rose-500">*</span></span>
+                              <span className="text-[10px] text-slate-500 font-bold">({selectedExchangeProduct?.unit || 'পিস'})</span>
+                            </Label>
+                            <Input
+                              type="number"
+                              min="0.01"
+                              step="any"
+                              value={newQty || ''}
+                              onChange={(e) => setNewQty(parseFloat(e.target.value) || 0)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddNewItem();
+                                }
+                              }}
+                              placeholder="১"
+                              className="h-10 bg-white border-slate-300 font-bold text-center text-sm"
+                            />
+                          </div>
+
+                          {/* 3. Sell Rate Input */}
+                          <div className="md:col-span-2 space-y-1.5">
+                            <Label className="text-xs font-bold text-slate-700">দর (৳)</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={newPrice || ''}
+                              onChange={(e) => setNewPrice(parseFloat(e.target.value) || 0)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddNewItem();
+                                }
+                              }}
+                              placeholder="০.০০"
+                              className="h-10 bg-white border-slate-300 font-bold text-center text-sm"
+                            />
+                          </div>
+
+                          {/* 4. Subtotal Preview */}
+                          <div className="md:col-span-1 space-y-1.5">
+                            <Label className="text-xs font-bold text-slate-500">মোট (৳)</Label>
+                            <div className="h-10 bg-slate-100 border border-slate-200 rounded-md flex items-center justify-center font-black text-slate-800 text-xs px-1 overflow-hidden">
+                              ৳{toBengaliDigits(Math.round((newQty * newPrice) * 100) / 100 || 0)}
+                            </div>
+                          </div>
+
+                          {/* 5. Add to Cart Button */}
+                          <div className="md:col-span-2">
+                            <Button
+                              type="button"
+                              onClick={handleAddNewItem}
+                              disabled={!selectedExchangeProduct && !newProdId}
+                              className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-md shadow-xs flex items-center justify-center gap-1.5 transition-all disabled:opacity-40"
+                            >
+                              <Plus className="w-4 h-4" /> কার্টে যোগ করুন
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
 
                       {/* New Taken Table */}
                       <div className="border border-slate-200 rounded-md overflow-hidden">

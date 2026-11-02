@@ -22,6 +22,7 @@ import { format } from 'date-fns';
 import { bn } from 'date-fns/locale';
 import { cn, formatDualStock } from '@/lib/utils';
 import { SupplierSearchSelect } from '@/components/SupplierSearchSelect';
+import { ProductSearchSelect, ProductOption } from '@/components/ProductSearchSelect';
 import { CascadingProductSelector, SelectedProductDetails } from '@/components/CascadingProductSelector';
 import { CartItemQtyInput } from '@/components/CartItemQtyInput';
 import { PurchaseInvoiceMemo } from '@/components/PurchaseInvoiceMemo';
@@ -69,6 +70,7 @@ export interface Product {
   name: string;
   category: string;
   brand?: string;
+  code?: string;
   buyPrice: number;
   sellPrice: number;
   stock: number;
@@ -152,6 +154,7 @@ export default function PurchasesPage() {
   // Cart & Item Line Selector States
   const [cart, setCart] = useState<PurchaseItem[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [selectedPurchaseProduct, setSelectedPurchaseProduct] = useState<ProductOption | null>(null);
   const [selectedCascadingProduct, setSelectedCascadingProduct] = useState<SelectedProductDetails | null>(null);
   const [itemQty, setItemQty] = useState<number>(1);
   const [itemPrice, setItemPrice] = useState<number>(0);
@@ -160,33 +163,36 @@ export default function PurchasesPage() {
   const [itemUnit, setItemUnit] = useState<string>('কেজি');
 
   const handleAddLineItem = async () => {
-    const nameToUse = selectedCascadingProduct?.name || (selectedProductId ? products.find(p => p.id === selectedProductId)?.name : '');
+    const nameToUse = selectedPurchaseProduct?.name || selectedCascadingProduct?.name || (selectedProductId ? products.find(p => p.id === selectedProductId)?.name : '');
     if (!nameToUse) {
       toast.error('পণ্যের নাম প্রদান করুন');
       return;
     }
 
-    const isRing = selectedCascadingProduct?.category === 'রিং' || (nameToUse || '').includes('রিং');
-    const unitToUse = isRing ? 'কেজি' : (selectedCascadingProduct?.unit || itemUnit || 'পিস');
-    const prodId = selectedCascadingProduct ? (selectedCascadingProduct.productId || `temp_${Date.now()}`) : (selectedProductId || `temp_${Date.now()}`);
+    const isRing = selectedPurchaseProduct?.category === 'রিং' || selectedCascadingProduct?.category === 'রিং' || (nameToUse || '').includes('রিং');
+    const unitToUse = selectedPurchaseProduct?.unit || (isRing ? 'কেজি' : (selectedCascadingProduct?.unit || itemUnit || 'পিস'));
+    const prodId = selectedPurchaseProduct?.id || (selectedCascadingProduct ? (selectedCascadingProduct.productId || `temp_${Date.now()}`) : (selectedProductId || `temp_${Date.now()}`));
 
     const newItem: PurchaseItem = {
       id: prodId,
       name: nameToUse,
-      category: selectedCascadingProduct?.category,
-      brand: selectedCascadingProduct?.brand,
+      category: selectedPurchaseProduct?.category || selectedCascadingProduct?.category,
+      brand: (selectedPurchaseProduct as any)?.brand || selectedCascadingProduct?.brand,
       mmSize: selectedCascadingProduct?.mmSize,
       variant: selectedCascadingProduct?.variant || selectedCascadingProduct?.cementType || selectedCascadingProduct?.mmSize,
       cementType: selectedCascadingProduct?.cementType,
       unit: unitToUse,
-      price: itemPrice,
-      sellPrice: itemSellPrice > 0 ? itemSellPrice : undefined,
+      price: itemPrice || (selectedPurchaseProduct?.buyPrice || 0),
+      sellPrice: itemSellPrice > 0 ? itemSellPrice : (selectedPurchaseProduct?.sellPrice || undefined),
       quantity: itemQty
     };
 
     setCart(prev => [...prev, newItem]);
     toast.success(`"${nameToUse}" ক্রয় কার্টে যুক্ত করা হয়েছে`);
 
+    setSelectedPurchaseProduct(null);
+    setSelectedCascadingProduct(null);
+    setSelectedProductId('');
     setItemQty(1);
     setItemPrice(0);
     setItemSellPrice(0);
@@ -228,7 +234,7 @@ export default function PurchasesPage() {
   const [laborPaymentStatus, setLaborPaymentStatus] = useState<'pending' | 'paid' | 'partial' | 'overpaid'>('pending');
   const [previousShippingPaidAmount, setPreviousShippingPaidAmount] = useState<number>(0);
   const [previousLaborPaidAmount, setPreviousLaborPaidAmount] = useState<number>(0);
-  const [isLandedCostAuto, setIsLandedCostAuto] = useState<boolean>(true);
+  const [isLandedCostAuto, setIsLandedCostAuto] = useState<boolean>(false);
 
   const [paymentOption, setPaymentOption] = useState<'now' | 'later'>('now');
   const [paidAmount, setPaidAmount] = useState<number>(0);
@@ -349,9 +355,10 @@ export default function PurchasesPage() {
       const prodList = await api.inventory.list();
       setProducts(prodList.map(p => ({
         id: String(p.id),
-        name: formatProductName(p.name, p.category_name),
-        category: p.category_name || 'অন্যান্য',
+        name: p.name,
+        category: p.category_name || 'সাধারণ',
         brand: p.brand || '',
+        code: p.sku || '',
         buyPrice: Number(p.purchase_price || 0),
         sellPrice: Number(p.sell_price || 0),
         stock: Number(p.stock || 0),
@@ -534,7 +541,7 @@ export default function PurchasesPage() {
       }
     }
 
-    setIsLandedCostAuto(true);
+    setIsLandedCostAuto(false);
     setPaymentOption('now');
     setPaidAmount(0);
     setPaymentMethod('Cash');
@@ -903,11 +910,7 @@ export default function PurchasesPage() {
     setShippingPaymentStatus(meta.shippingStatus || (shipPaid > 0 ? 'paid' : 'pending'));
     setLaborPaymentStatus(meta.laborStatus || (labPaid > 0 ? 'paid' : 'pending'));
 
-    if (meta.isLandedCostAuto !== undefined) {
-      setIsLandedCostAuto(Boolean(meta.isLandedCostAuto));
-    } else {
-      setIsLandedCostAuto(true);
-    }
+    setIsLandedCostAuto(false);
 
     setCommissionType(meta.commissionType || 'flat');
     setCommissionRate(meta.commissionRate !== undefined ? Number(meta.commissionRate) : 0);
@@ -1062,13 +1065,16 @@ export default function PurchasesPage() {
               <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
                 <Truck className="w-7 h-7 text-indigo-600" /> ক্রয় ইনভয়েস তালিকা
               </h1>
-              <p className="text-slate-500 text-xs mt-0.5 font-medium">রড ও সিমেন্ট ক্রয়ের হিসাব, চালান ও সরবরাহকারীর পাওনা ব্যবস্থাপনা</p>
+              <p className="text-slate-500 text-xs mt-0.5 font-medium">পণ্য ক্রয়ের হিসাব, চালান ও সরবরাহকারীর পাওনা ব্যবস্থাপনা</p>
             </div>
 
             <div className="flex items-center gap-3">
               {canCreateInvoice && (
                 <Button 
-                  onClick={() => setIsTypeModalOpen(true)}
+                  onClick={() => {
+                    resetForm();
+                    setIsCreateOpen(true);
+                  }}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white h-10 px-5 rounded-md font-bold text-xs shadow-md shadow-indigo-600/20 active:scale-95 transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4 mr-1.5" /> + নতুন ক্রয় ইনভয়েস
@@ -1617,32 +1623,117 @@ export default function PurchasesPage() {
                       </Label>
                     </div>
 
-                    {/* Step-by-Step Cascading Product Selector (Rod, Cement, Ring) */}
-                    <CascadingProductSelector
-                      products={products}
-                      purchaseType={purchaseType}
-                      onProductChange={(selected) => {
-                        setSelectedCascadingProduct(selected);
-                        setSelectedProductId(selected?.productId || '');
-                      }}
-                      showPriceField={true}
-                      showTotalPriceField={true}
-                      priceLabel="ক্রয় মূল্য (৳)"
-                      itemPrice={itemPrice}
-                      onPriceChange={setItemPrice}
-                      showSellPriceField={true}
-                      itemSellPrice={itemSellPrice}
-                      onSellPriceChange={setItemSellPrice}
-                      showAlertLimitField={true}
-                      itemAlertLimit={itemAlertLimit}
-                      onAlertLimitChange={setItemAlertLimit}
-                      itemQty={itemQty}
-                      onQtyChange={setItemQty}
-                      itemUnit={itemUnit}
-                      onUnitChange={setItemUnit}
-                      onAddCartItem={handleAddLineItem}
-                      buttonLabel="+ কার্টে পণ্য যোগ করুন"
-                    />
+                    {/* Unified Single-Field Product Selector (Search + Dropdown combined) */}
+                    <div className="bg-slate-50/90 border border-slate-200/90 rounded-lg p-3 sm:p-4 space-y-3 font-bengali shadow-xs">
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        {/* 1. Single Input Field (Dropdown + Search) */}
+                        <div className="md:col-span-4 space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                            <span>পণ্য নির্বাচন করুন <span className="text-rose-500">*</span></span>
+                            {selectedPurchaseProduct && (
+                              <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                                বর্তমান স্টক: {toBengaliDigits(selectedPurchaseProduct.stock ?? 0)} {selectedPurchaseProduct.unit || 'পিস'}
+                              </span>
+                            )}
+                          </Label>
+                          <ProductSearchSelect
+                            products={products as any}
+                            selectedProduct={selectedPurchaseProduct}
+                            onSelectProduct={(prod) => {
+                              setSelectedPurchaseProduct(prod);
+                              if (prod) {
+                                setSelectedProductId(prod.id);
+                                setItemPrice(prod.buyPrice || 0);
+                                setItemSellPrice(prod.sellPrice || 0);
+                                setItemUnit(prod.unit || 'পিস');
+                              } else {
+                                setSelectedProductId('');
+                                setItemPrice(0);
+                                setItemSellPrice(0);
+                                setItemUnit('পিস');
+                              }
+                            }}
+                            placeholder="ক্রয়কৃত পণ্য সার্চ করুন বা ড্রপডাউনে ক্লিক করুন..."
+                            onlyInStock={false}
+                          />
+                        </div>
+
+                        {/* 2. Quantity Input */}
+                        <div className="md:col-span-2 space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                            <span>পরিমাণ <span className="text-rose-500">*</span></span>
+                            <span className="text-[10px] text-slate-500 font-bold">({selectedPurchaseProduct?.unit || itemUnit || 'পিস'})</span>
+                          </Label>
+                          <Input
+                            type="number"
+                            min="0.01"
+                            step="any"
+                            value={itemQty || ''}
+                            onChange={(e) => setItemQty(parseFloat(e.target.value) || 0)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddLineItem();
+                              }
+                            }}
+                            placeholder="১"
+                            className="h-10 bg-white border-slate-300 font-bold text-center text-sm"
+                          />
+                        </div>
+
+                        {/* 3. Purchase Rate Input */}
+                        <div className="md:col-span-2 space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-700">ক্রয় মূল্য (৳) <span className="text-rose-500">*</span></Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={itemPrice || ''}
+                            onChange={(e) => setItemPrice(parseFloat(e.target.value) || 0)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddLineItem();
+                              }
+                            }}
+                            placeholder="০.০০"
+                            className="h-10 bg-white border-slate-300 font-bold text-center text-sm"
+                          />
+                        </div>
+
+                        {/* 4. Sell Rate Input (optional) */}
+                        <div className="md:col-span-2 space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-700">নতুন বিক্রয় দর (৳)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={itemSellPrice || ''}
+                            onChange={(e) => setItemSellPrice(parseFloat(e.target.value) || 0)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddLineItem();
+                              }
+                            }}
+                            placeholder="০.০০"
+                            className="h-10 bg-white border-slate-300 font-bold text-center text-sm"
+                          />
+                        </div>
+
+                        {/* 5. Add to Cart Button */}
+                        <div className="md:col-span-2">
+                          <Button
+                            type="button"
+                            onClick={handleAddLineItem}
+                            disabled={!selectedPurchaseProduct && !selectedProductId}
+                            className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-md shadow-xs flex items-center justify-center gap-1.5 transition-all disabled:opacity-40"
+                          >
+                            <Plus className="w-4 h-4" /> কার্টে যোগ করুন
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
 
 
                     {/* Table */}
@@ -1653,7 +1744,7 @@ export default function PurchasesPage() {
                             <TableHead className="w-10 text-center font-black">#</TableHead>
                             <TableHead className="font-black">পণ্যের নাম</TableHead>
                             <TableHead className="text-center font-black">ব্র্যান্ড</TableHead>
-                            <TableHead className="text-center font-black">সাইজ / টাইপ</TableHead>
+                            <TableHead className="text-center font-black">ক্যাটাগরি / সাইজ</TableHead>
                             <TableHead className="text-center font-black">পরিমাণ</TableHead>
                             <TableHead className="text-right font-black">মোট ক্রয় মূল্য (৳)</TableHead>
                             <TableHead className="w-10 text-center font-black">🗑️</TableHead>
@@ -1672,8 +1763,8 @@ export default function PurchasesPage() {
                             return (
                               <TableRow key={item.id ? `${item.id}-${idx}` : `${item.name}-${idx}`} className="text-xs border-b border-slate-100">
                                 <TableCell className="text-center font-bold text-slate-400">{toBengaliDigits(idx + 1)}</TableCell>
-                                <TableCell className="font-bold text-slate-900">{parsed.categoryName}</TableCell>
-                                <TableCell className="text-center font-bold text-slate-700">{parsed.brandName}</TableCell>
+                                <TableCell className="font-bold text-slate-900">{item.name || parsed.categoryName}</TableCell>
+                                <TableCell className="text-center font-bold text-slate-700">{item.brand || parsed.brandName || '—'}</TableCell>
                                 <TableCell className="text-center font-bold text-slate-700">
                                   {parsed.sizeName === 'OPC' ? (
                                     <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200 shadow-2xs">
@@ -1684,7 +1775,7 @@ export default function PurchasesPage() {
                                       PCC
                                     </span>
                                   ) : (
-                                    parsed.sizeName
+                                    item.category || parsed.sizeName || '—'
                                   )}
                                 </TableCell>
                                 <TableCell className="text-center">
@@ -1711,21 +1802,6 @@ export default function PurchasesPage() {
                                         title="মোট মূল্য পরিবর্তন করলে সিস্টেম স্বয়ংক্রিয় ভাগ করে নিবে"
                                       />
                                     </div>
-                                    {isLandedCostAuto && ((shippingCost || 0) + (laborCost || 0) > 0) && cartSubtotal > 0 && (
-                                      <div className="text-[10px] font-black text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-md inline-block shadow-2xs">
-                                        {(() => {
-                                          const extraCharges = (shippingCost || 0) + (laborCost || 0);
-                                          const extraPerUnit = (cartSubtotal > 0 && item.quantity > 0)
-                                            ? (((item.price * item.quantity / cartSubtotal) * extraCharges) / item.quantity)
-                                            : 0;
-                                          const landedTotal = (item.price + extraPerUnit) * item.quantity;
-                                          const displayLanded = landedTotal % 1 === 0 
-                                            ? landedTotal.toLocaleString('en-IN')
-                                            : landedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                          return `খরচসহ মোট: ৳${toBengaliDigits(displayLanded)}`;
-                                        })()}
-                                      </div>
-                                    )}
                                   </div>
                                 </TableCell>
                                 <TableCell className="text-center">
@@ -1967,28 +2043,6 @@ export default function PurchasesPage() {
                         >
                           📌 {purchaseType === 'rod' ? 'রড ও রিং' : 'সিমেন্ট'} ডিফল্ট সেভ করুন
                         </button>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs font-bold text-slate-700">
-                            Auto Landed Cost
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setIsLandedCostAuto(!isLandedCostAuto)}
-                            className={cn(
-                              "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden",
-                              isLandedCostAuto ? "bg-orange-600" : "bg-slate-300"
-                            )}
-                            title={isLandedCostAuto ? "Auto Landed Cost চালু (গাড়ি ভাড়া ও লেবার কেনা দামে যুক্ত হবে)" : "Auto Landed Cost বন্ধ"}
-                          >
-                            <span
-                              className={cn(
-                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out",
-                                isLandedCostAuto ? "translate-x-5" : "translate-x-0"
-                              )}
-                            />
-                          </button>
-                        </div>
                       </div>
                     </CardContent>
                   </Card>

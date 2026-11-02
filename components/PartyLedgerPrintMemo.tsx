@@ -736,10 +736,10 @@ export const PartyLedgerPrintMemo: React.FC<PartyLedgerPrintMemoProps> = ({
             </span>
           </div>
           <p className="text-[11px] font-bold text-[#c52222]">
-            রড, সিমেন্ট, পাইকারী ও খুচরা বিক্রয় করা হয়।
+            পাইকারী ও খুচরা বিক্রয় কেন্দ্র
           </p>
           <p className="text-[11px] font-bold text-[#1a56b0]">
-            ডিলারঃ এ্যাংকর সিমেন্ট এবং হোলসিম সিমেন্ট, BSRM / SCRM রড
+            সততা ও সেবাই আমাদের মূল লক্ষ্য
           </p>
           <div className="pt-0.5">
             <span className="inline-block bg-[#1a365d] text-white px-5 py-0.5 rounded text-[10px] font-semibold">

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Shell } from '@/components/Shell';
 import { api, ProductCostLogData, ProductCostLogEntry } from '@/lib/api';
-import { Search, Package, AlertCircle, AlertTriangle, CheckCircle2, Edit3, History, ArrowUpRight, ArrowDownRight, RefreshCw, Calculator, Clock, Layers, Filter, Printer } from 'lucide-react';
+import { Search, Package, AlertCircle, AlertTriangle, CheckCircle2, Edit3, Trash2, PlusCircle, History, ArrowUpRight, ArrowDownRight, RefreshCw, Calculator, Clock, Layers, Filter, Printer, X } from 'lucide-react';
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from '@/components/ui/table';
@@ -34,7 +34,21 @@ interface Product {
   needsPriceReview?: boolean;
 }
 
-const categories = ['রড', 'রিং', 'সিমেন্ট', 'অন্যান্য'];
+export const STANDARD_UNITS = [
+  'পিস',
+  'কেজি',
+  'গ্রাম',
+  'লিটার',
+  'মিলি',
+  'প্যাকেট',
+  'বক্স',
+  'ডজন',
+  'কার্টন',
+  'বস্তা',
+  'মিটার',
+  'ফুট',
+  'গজ',
+];
 
 export const getCustomProductSortRank = (p: Product) => {
   const cat = (p.category || '').trim();
@@ -145,6 +159,8 @@ export const sortProductsCustom = (list: Product[]): Product[] => {
     const rankB = getCustomProductSortRank(b);
 
     if (rankA.catRank !== rankB.catRank) return rankA.catRank - rankB.catRank;
+    const catComp = (a.category || '').localeCompare(b.category || '', 'bn');
+    if (rankA.catRank === 4 && catComp !== 0) return catComp;
     if (rankA.subRank !== rankB.subRank) return rankA.subRank - rankB.subRank;
     if (rankA.sizeNum !== rankB.sizeNum) return rankA.sizeNum - rankB.sizeNum;
     return rankA.name.localeCompare(rankB.name, 'bn');
@@ -216,7 +232,39 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState('সব');
+  const [categoriesList, setCategoriesList] = useState<string[]>([]);
   const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
+
+  // Add Product State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSavingNewProduct, setIsSavingNewProduct] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    category: '',
+    customCategory: '',
+    brand: '',
+    unit: 'পিস',
+    customUnit: '',
+    openingStock: '',
+    buyPrice: '',
+    sellPrice: '',
+    alertThreshold: '5'
+  });
+
+  // Edit Product State
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editProductForm, setEditProductForm] = useState({
+    name: '',
+    category: '',
+    customCategory: '',
+    brand: '',
+    unit: 'পিস',
+    customUnit: '',
+    buyPrice: '',
+    sellPrice: '',
+    alertThreshold: '5'
+  });
 
   // Simple Delete State
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
@@ -238,7 +286,10 @@ export default function InventoryPage() {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const data = await api.inventory.list();
+      const [data, catRes] = await Promise.all([
+        api.inventory.list(),
+        api.categories.list().catch(() => [])
+      ]);
       const safeData = Array.isArray(data) ? data : [];
       const mapped = safeData.map(p => ({
         id: String(p.id),
@@ -253,10 +304,116 @@ export default function InventoryPage() {
         needsPriceReview: Boolean(p.needs_price_review)
       }));
       setProducts(sortProductsCustom(mapped));
+
+      const backendCats = (catRes || []).map((c: any) => String(c.name || '').trim()).filter(Boolean);
+      const productCats = safeData.map(p => String(p.category_name || '').trim()).filter(Boolean);
+      const allUniqueCats = Array.from(new Set([...backendCats, ...productCats])).filter(Boolean);
+      setCategoriesList(allUniqueCats);
     } catch (err) {
       console.error('Error loading inventory:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateProduct = async () => {
+    if (!newProduct.name.trim()) {
+      toast.error('পণ্যের নাম প্রদান করা আবশ্যক');
+      return;
+    }
+    const finalCategory = newProduct.category === '__new__' 
+      ? newProduct.customCategory.trim() 
+      : (newProduct.category.trim() || 'সাধারণ');
+    const finalUnit = newProduct.unit === '__custom__' 
+      ? newProduct.customUnit.trim() 
+      : (newProduct.unit.trim() || 'পিস');
+
+    try {
+      setIsSavingNewProduct(true);
+      await api.inventory.create({
+        name: newProduct.name.trim(),
+        category_name: finalCategory,
+        brand: newProduct.brand.trim() || undefined,
+        unit: finalUnit,
+        opening_stock: Number(newProduct.openingStock) || 0,
+        stock: Number(newProduct.openingStock) || 0,
+        purchase_price: Number(newProduct.buyPrice) || 0,
+        sell_price: Number(newProduct.sellPrice) || 0,
+        min_stock: Number(newProduct.alertThreshold) || 5,
+      });
+
+      toast.success('নতুন পণ্য সফলভাবে তৈরি হয়েছে');
+      setIsAddModalOpen(false);
+      setNewProduct({
+        name: '',
+        category: '',
+        customCategory: '',
+        brand: '',
+        unit: 'পিস',
+        customUnit: '',
+        openingStock: '',
+        buyPrice: '',
+        sellPrice: '',
+        alertThreshold: '5'
+      });
+      await fetchProducts();
+    } catch (err: any) {
+      console.error('Error creating product:', err);
+      toast.error('পণ্য তৈরি করা সম্ভব হয়নি');
+    } finally {
+      setIsSavingNewProduct(false);
+    }
+  };
+
+  const openEditProductModal = (p: Product) => {
+    setEditingProduct(p);
+    const isStandardUnit = STANDARD_UNITS.includes(p.unit);
+    setEditProductForm({
+      name: p.name,
+      category: p.category,
+      customCategory: '',
+      brand: p.brand || '',
+      unit: isStandardUnit ? p.unit : '__custom__',
+      customUnit: isStandardUnit ? '' : p.unit,
+      buyPrice: String(p.buyPrice || ''),
+      sellPrice: String(p.sellPrice || ''),
+      alertThreshold: String(p.alertThreshold || '5')
+    });
+  };
+
+  const handleUpdateProduct = async () => {
+    if (!editingProduct) return;
+    if (!editProductForm.name.trim()) {
+      toast.error('পণ্যের নাম প্রদান করা আবশ্যক');
+      return;
+    }
+    const finalCategory = editProductForm.category === '__new__' 
+      ? editProductForm.customCategory.trim() 
+      : (editProductForm.category.trim() || 'সাধারণ');
+    const finalUnit = editProductForm.unit === '__custom__' 
+      ? editProductForm.customUnit.trim() 
+      : (editProductForm.unit.trim() || 'পিস');
+
+    try {
+      setIsSavingEdit(true);
+      await api.inventory.update(editingProduct.id, {
+        name: editProductForm.name.trim(),
+        category_name: finalCategory,
+        brand: editProductForm.brand.trim() || undefined,
+        unit: finalUnit,
+        purchase_price: Number(editProductForm.buyPrice) || 0,
+        sell_price: Number(editProductForm.sellPrice) || 0,
+        min_stock: Number(editProductForm.alertThreshold) || 5,
+      });
+
+      toast.success('পণ্য সফলভাবে আপডেট করা হয়েছে');
+      setEditingProduct(null);
+      await fetchProducts();
+    } catch (err: any) {
+      console.error('Error updating product:', err);
+      toast.error('পণ্য আপডেট করা সম্ভব হয়নি');
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -388,6 +545,11 @@ export default function InventoryPage() {
     }
   };
 
+  const displayCategories = Array.from(new Set([
+    ...categoriesList,
+    ...products.map(p => p.category || 'সাধারণ')
+  ])).filter(Boolean);
+
   const filtered = sortProductsCustom(products.filter(p => 
     (filterCat === 'সব' || p.category === filterCat) &&
     (p.name.toLowerCase().includes(search.toLowerCase()) || (p.brand && p.brand.toLowerCase().includes(search.toLowerCase())))
@@ -426,9 +588,16 @@ export default function InventoryPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-slate-900 font-bengali">পণ্য তালিকা ও স্টক</h2>
-            <p className="text-slate-500 font-bengali text-sm">রড, সিমেন্ট, রিং ও অন্যান্য পণ্যের বর্তমান মজুদ ও বিবরণ</p>
+            <p className="text-slate-500 font-bengali text-sm">দোকানের সকল পণ্যের বর্তমান মজুদ ও বিবরণ</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              onClick={() => setIsAddModalOpen(true)}
+              className="bg-orange-600 hover:bg-orange-700 text-white font-bengali font-bold text-xs gap-2 rounded-xl shadow-xs cursor-pointer active:scale-95 transition-all py-2.5 px-4"
+            >
+              <PlusCircle className="w-4 h-4" />
+              + নতুন পণ্য যোগ করুন
+            </Button>
             <Button
               onClick={() => printElement('stock-sheet-printable-wrapper')}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bengali font-bold text-xs gap-2 rounded-xl shadow-xs cursor-pointer active:scale-95 transition-all py-2.5 px-4"
@@ -477,7 +646,7 @@ export default function InventoryPage() {
                 <Input placeholder="পণ্য বা ব্র্যান্ড খুঁজুন..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white border-slate-200 font-bengali rounded-lg" />
               </div>
               <div className="flex gap-1 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 custom-scrollbar">
-                {['সব', ...categories].map(cat => (
+                {['সব', ...displayCategories].map(cat => (
                   <button key={cat} onClick={() => setFilterCat(cat)} className={cn("px-3 py-1.5 rounded-lg text-xs font-bold font-bengali transition-colors cursor-pointer whitespace-nowrap", filterCat === cat ? 'bg-orange-600 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50')}>
                     {cat}
                   </button>
@@ -569,6 +738,24 @@ export default function InventoryPage() {
                       </TableCell>
                       <TableCell className="text-center font-bengali p-2" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditProductModal(product)}
+                            className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                            title="পণ্য এডিট করুন"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeletingProduct(product)}
+                            className="h-8 w-8 p-0 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="পণ্য মুছে ফেলুন"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -854,6 +1041,289 @@ export default function InventoryPage() {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add New Product Dialog */}
+      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+        <DialogContent className="w-[95vw] max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl p-6 font-bengali">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
+              <PlusCircle className="w-5 h-5 text-orange-600" />
+              নতুন পণ্য যোগ করুন
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">
+                পণ্যের নাম <span className="text-rose-500">*</span>
+              </label>
+              <Input
+                placeholder="যেমন: তীর সয়াবিন তেল ১ লিটার, এসিআই লবণ..."
+                value={newProduct.name}
+                onChange={e => setNewProduct(prev => ({ ...prev, name: e.target.value }))}
+                className="font-bengali text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">ক্যাটাগরি</label>
+                <select
+                  value={newProduct.category}
+                  onChange={e => setNewProduct(prev => ({ ...prev, category: e.target.value }))}
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">ক্যাটাগরি নির্বাচন করুন</option>
+                  {displayCategories.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                  <option value="__new__">+ নতুন ক্যাটাগরি তৈরি করুন</option>
+                </select>
+                {newProduct.category === '__new__' && (
+                  <Input
+                    placeholder="নতুন ক্যাটাগরির নাম লিখুন..."
+                    value={newProduct.customCategory}
+                    onChange={e => setNewProduct(prev => ({ ...prev, customCategory: e.target.value }))}
+                    className="mt-2 font-bengali text-xs"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">কোম্পানি / ব্র্যান্ড (ঐচ্ছিক)</label>
+                <Input
+                  placeholder="যেমন: তীর, রূপচাঁদা, স্কয়ার..."
+                  value={newProduct.brand}
+                  onChange={e => setNewProduct(prev => ({ ...prev, brand: e.target.value }))}
+                  className="font-bengali text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">একক (Unit)</label>
+                <select
+                  value={newProduct.unit}
+                  onChange={e => setNewProduct(prev => ({ ...prev, unit: e.target.value }))}
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-orange-500"
+                >
+                  {STANDARD_UNITS.map(u => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                  <option value="__custom__">অন্যান্য (নিজে লিখুন)</option>
+                </select>
+                {newProduct.unit === '__custom__' && (
+                  <Input
+                    placeholder="এককের নাম লিখুন..."
+                    value={newProduct.customUnit}
+                    onChange={e => setNewProduct(prev => ({ ...prev, customUnit: e.target.value }))}
+                    className="mt-2 font-bengali text-xs"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">প্রারম্ভিক মজুদ (Opening Stock)</label>
+                <Input
+                  type="number"
+                  placeholder="০"
+                  value={newProduct.openingStock}
+                  onChange={e => setNewProduct(prev => ({ ...prev, openingStock: e.target.value }))}
+                  className="font-bengali text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">ক্রয়মূল্য (৳)</label>
+                <Input
+                  type="number"
+                  placeholder="০.০০"
+                  value={newProduct.buyPrice}
+                  onChange={e => setNewProduct(prev => ({ ...prev, buyPrice: e.target.value }))}
+                  className="font-bengali text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">বিক্রয়মূল্য (৳)</label>
+                <Input
+                  type="number"
+                  placeholder="০.০০"
+                  value={newProduct.sellPrice}
+                  onChange={e => setNewProduct(prev => ({ ...prev, sellPrice: e.target.value }))}
+                  className="font-bengali text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">কম স্টক সতর্কতা সীমা</label>
+                <Input
+                  type="number"
+                  placeholder="৫"
+                  value={newProduct.alertThreshold}
+                  onChange={e => setNewProduct(prev => ({ ...prev, alertThreshold: e.target.value }))}
+                  className="font-bengali text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+            <Button
+              variant="outline"
+              onClick={() => setIsAddModalOpen(false)}
+              disabled={isSavingNewProduct}
+              className="font-bengali text-xs"
+            >
+              বাতিল
+            </Button>
+            <Button
+              onClick={handleCreateProduct}
+              disabled={isSavingNewProduct}
+              className="bg-orange-600 hover:bg-orange-700 text-white font-bold font-bengali text-xs shadow-sm"
+            >
+              {isSavingNewProduct ? 'সংরক্ষণ হচ্ছে...' : 'পণ্য সংরক্ষণ করুন'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Product Dialog */}
+      <Dialog open={!!editingProduct} onOpenChange={(open) => { if (!open) setEditingProduct(null); }}>
+        <DialogContent className="w-[95vw] max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl p-6 font-bengali">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
+              <Edit3 className="w-5 h-5 text-blue-600" />
+              পণ্য তথ্য এডিট করুন
+            </DialogTitle>
+          </DialogHeader>
+
+          {editingProduct && (
+            <div className="space-y-4 py-2">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  পণ্যের নাম <span className="text-rose-500">*</span>
+                </label>
+                <Input
+                  value={editProductForm.name}
+                  onChange={e => setEditProductForm(prev => ({ ...prev, name: e.target.value }))}
+                  className="font-bengali text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">ক্যাটাগরি</label>
+                  <select
+                    value={editProductForm.category}
+                    onChange={e => setEditProductForm(prev => ({ ...prev, category: e.target.value }))}
+                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">ক্যাটাগরি নির্বাচন করুন</option>
+                    {displayCategories.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                    <option value="__new__">+ নতুন ক্যাটাগরি তৈরি করুন</option>
+                  </select>
+                  {editProductForm.category === '__new__' && (
+                    <Input
+                      placeholder="নতুন ক্যাটাগরির নাম লিখুন..."
+                      value={editProductForm.customCategory}
+                      onChange={e => setEditProductForm(prev => ({ ...prev, customCategory: e.target.value }))}
+                      className="mt-2 font-bengali text-xs"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">কোম্পানি / ব্র্যান্ড (ঐচ্ছিক)</label>
+                  <Input
+                    placeholder="যেমন: তীর, রূপচাঁদা, স্কয়ার..."
+                    value={editProductForm.brand}
+                    onChange={e => setEditProductForm(prev => ({ ...prev, brand: e.target.value }))}
+                    className="font-bengali text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">একক (Unit)</label>
+                  <select
+                    value={editProductForm.unit}
+                    onChange={e => setEditProductForm(prev => ({ ...prev, unit: e.target.value }))}
+                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  >
+                    {STANDARD_UNITS.map(u => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                    <option value="__custom__">অন্যান্য (নিজে লিখুন)</option>
+                  </select>
+                  {editProductForm.unit === '__custom__' && (
+                    <Input
+                      placeholder="এককের নাম লিখুন..."
+                      value={editProductForm.customUnit}
+                      onChange={e => setEditProductForm(prev => ({ ...prev, customUnit: e.target.value }))}
+                      className="mt-2 font-bengali text-xs"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">ক্রয়মূল্য (৳)</label>
+                  <Input
+                    type="number"
+                    value={editProductForm.buyPrice}
+                    onChange={e => setEditProductForm(prev => ({ ...prev, buyPrice: e.target.value }))}
+                    className="font-bengali text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">বিক্রয়মূল্য (৳)</label>
+                  <Input
+                    type="number"
+                    value={editProductForm.sellPrice}
+                    onChange={e => setEditProductForm(prev => ({ ...prev, sellPrice: e.target.value }))}
+                    className="font-bengali text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">কম স্টক সতর্কতা সীমা</label>
+                <Input
+                  type="number"
+                  value={editProductForm.alertThreshold}
+                  onChange={e => setEditProductForm(prev => ({ ...prev, alertThreshold: e.target.value }))}
+                  className="font-bengali text-sm"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+            <Button
+              variant="outline"
+              onClick={() => setEditingProduct(null)}
+              disabled={isSavingEdit}
+              className="font-bengali text-xs"
+            >
+              বাতিল
+            </Button>
+            <Button
+              onClick={handleUpdateProduct}
+              disabled={isSavingEdit}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold font-bengali text-xs shadow-sm"
+            >
+              {isSavingEdit ? 'সংরক্ষণ হচ্ছে...' : 'পরিবর্তন সংরক্ষণ করুন'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

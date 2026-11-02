@@ -2,56 +2,68 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, X, ChevronDown, Check, Package, Layers } from 'lucide-react';
+import { Search, X, ChevronDown, Check, Package } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatProductName } from '@/lib/bengaliUtils';
+import { toBengaliDigits, formatProductName } from '@/lib/bengaliUtils';
 
 export interface ProductOption {
   id: string;
   name: string;
   sellPrice: number;
+  buyPrice?: number;
   stock?: number;
   unit?: string;
   category?: string;
+  brand?: string;
   code?: string;
 }
 
 interface ProductSearchSelectProps {
   products: ProductOption[];
-  selectedProductId: string;
+  selectedProduct: ProductOption | null;
   onSelectProduct: (product: ProductOption | null) => void;
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  onlyInStock?: boolean;
 }
-
-const CATEGORY_TABS = [
-  { id: 'সব', label: 'সব পণ্য' },
-  { id: 'রড', label: '🏗️ রড (Rod)' },
-  { id: 'সিমেন্ট', label: '🧱 সিমেন্ট (Cement)' },
-  { id: 'রিং', label: '⭕ রিং (Ring)' },
-  { id: 'অন্যান্য', label: '📦 অন্যান্য' },
-];
 
 export function ProductSearchSelect({
   products,
-  selectedProductId,
+  selectedProduct,
   onSelectProduct,
-  placeholder = 'পণ্যের নাম বা ক্যাটাগরি টাইপ করে খুঁজুন...',
+  placeholder = 'পণ্যের নাম, ব্র্যান্ড বা কোড দিয়ে খুঁজুন...',
   className,
   disabled = false,
+  onlyInStock = false,
 }: ProductSearchSelectProps) {
-  const [activeTab, setActiveTab] = useState<string>('সব');
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
   const [coords, setCoords] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
+  // Filter products by stock and query
+  const filteredProducts = React.useMemo(() => {
+    let list = products;
+    if (onlyInStock) {
+      list = list.filter((p) => (p.stock || 0) > 0);
+    }
+    if (!searchQuery.trim()) return list;
 
-  // Calculate floating portal coordinates
+    const q = searchQuery.toLowerCase().trim();
+    return list.filter((p) => {
+      const name = (p.name || '').toLowerCase();
+      const brand = (p.brand || '').toLowerCase();
+      const cat = (p.category || '').toLowerCase();
+      const code = (p.code || '').toLowerCase();
+      return name.includes(q) || brand.includes(q) || cat.includes(q) || code.includes(q);
+    });
+  }, [products, onlyInStock, searchQuery]);
+
+  // Update floating viewport position
   const updatePosition = useCallback(() => {
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
@@ -67,6 +79,7 @@ export function ProductSearchSelect({
     if (!disabled) {
       updatePosition();
       setIsOpen(true);
+      setHighlightedIndex(0);
       inputRef.current?.focus();
     }
   };
@@ -99,42 +112,6 @@ export function ProductSearchSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Category matching function
-  const isCategoryMatch = (p: ProductOption, tab: string) => {
-    if (tab === 'সব') return true;
-    const name = (p.name || '').toLowerCase();
-    const cat = (p.category || '').toLowerCase();
-
-    if (tab === 'রড') {
-      return cat === 'রড' || cat.includes('rod') || name.includes('রড') || name.includes('মিলি') || name.includes('mm');
-    }
-    if (tab === 'সিমেন্ট') {
-      return cat === 'সিমেন্ট' || cat.includes('cement') || name.includes('সিমেন্ট');
-    }
-    if (tab === 'রিং') {
-      return cat === 'রিং' || cat.includes('ring') || name.includes('রিং');
-    }
-    if (tab === 'অন্যান্য') {
-      const isRod = cat === 'রড' || cat.includes('rod') || name.includes('রড') || name.includes('মিলি') || name.includes('mm');
-      const isCement = cat === 'সিমেন্ট' || cat.includes('cement') || name.includes('সিমেন্ট');
-      const isRing = cat === 'রিং' || cat.includes('ring') || name.includes('রিং');
-      return !isRod && !isCement && !isRing;
-    }
-    return true;
-  };
-
-  // Filter products by tab and search query
-  const filteredProducts = products.filter((p) => {
-    if (!isCategoryMatch(p, activeTab)) return false;
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase().trim();
-    return (
-      p.name.toLowerCase().includes(q) ||
-      (p.category && p.category.toLowerCase().includes(q)) ||
-      (p.code && p.code.toLowerCase().includes(q))
-    );
-  });
-
   const handleSelect = (prod: ProductOption) => {
     onSelectProduct(prod);
     setSearchQuery('');
@@ -150,43 +127,39 @@ export function ProductSearchSelect({
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter') {
+        openDropdown();
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev + 1 < filteredProducts.length ? prev + 1 : 0));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev - 1 >= 0 ? prev - 1 : filteredProducts.length - 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredProducts[highlightedIndex]) {
+        handleSelect(filteredProducts[highlightedIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
   const isClient = typeof document !== 'undefined';
 
   return (
-    <div ref={containerRef} className={cn('space-y-2 w-full font-bengali', className)}>
-      {/* Category Tabs Header */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-        {CATEGORY_TABS.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                setActiveTab(tab.id);
-                if (!isOpen) {
-                  openDropdown();
-                } else {
-                  updatePosition();
-                }
-              }}
-              className={cn(
-                'px-2.5 py-1 rounded-lg font-bold text-[11px] whitespace-nowrap transition-all border',
-                isActive
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-xs scale-[1.02]'
-                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
-              )}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-
+    <div ref={containerRef} className={cn('relative w-full font-bengali', className)}>
       {/* Search Input Box */}
       <div
         className={cn(
-          'relative flex items-center w-full rounded-xl border bg-slate-50 transition-all cursor-text min-h-[42px]',
+          'relative flex items-center w-full rounded-xl border bg-slate-50 transition-all cursor-text min-h-[44px]',
           isOpen ? 'border-orange-500 ring-2 ring-orange-500/20 bg-white' : 'border-slate-200 hover:border-slate-300',
           disabled && 'opacity-60 pointer-events-none'
         )}
@@ -198,21 +171,21 @@ export function ProductSearchSelect({
           <div className="flex items-center justify-between w-full py-2 px-3 text-xs font-bold text-slate-800">
             <div className="flex items-center gap-2 truncate">
               <span className="font-black text-slate-900">{formatProductName(selectedProduct.name, selectedProduct.category)}</span>
-              <span className="text-orange-600 font-black">৳{selectedProduct.sellPrice.toLocaleString()}</span>
-              {selectedProduct.unit && (
-                <span className="text-slate-400 text-[11px]">/{selectedProduct.unit}</span>
+              {selectedProduct.brand && (
+                <span className="text-slate-500 font-semibold">({selectedProduct.brand})</span>
               )}
-              {selectedProduct.stock !== undefined && (
-                <span className="text-slate-500 font-semibold text-[11px]">
-                  (স্টক: {selectedProduct.stock} {selectedProduct.unit || ''})
-                </span>
-              )}
+              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-1.5 py-0.5 rounded">
+                স্টক: {toBengaliDigits(selectedProduct.stock || 0)} {selectedProduct.unit || 'পিস'}
+              </span>
+              <span className="text-orange-600 font-black">
+                ৳{toBengaliDigits(selectedProduct.sellPrice || 0)}
+              </span>
             </div>
             <button
               type="button"
               onClick={handleClear}
-              className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors ml-2 shrink-0"
-              title="পণ্য বাদ দিন"
+              className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors ml-2 shrink-0 cursor-pointer"
+              title="পণ্য পরিবর্তন করুন"
             >
               <X className="w-4 h-4" />
             </button>
@@ -224,23 +197,25 @@ export function ProductSearchSelect({
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
+              setHighlightedIndex(0);
               if (!isOpen) {
                 updatePosition();
                 setIsOpen(true);
               }
             }}
+            onKeyDown={handleKeyDown}
             onFocus={openDropdown}
             placeholder={
               selectedProduct
-                ? `${formatProductName(selectedProduct.name, selectedProduct.category)} — ৳${selectedProduct.sellPrice}`
-                : `${activeTab === 'সব' ? 'সকল' : activeTab} পণ্য সার্চ করতে লিখুন...`
+                ? `${selectedProduct.name} (দর: ৳${toBengaliDigits(selectedProduct.sellPrice || 0)})`
+                : placeholder
             }
-            className="w-full py-2 pl-2.5 pr-8 bg-transparent text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:outline-none"
+            className="w-full py-2.5 pl-2.5 pr-8 bg-transparent text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:outline-none"
             disabled={disabled}
           />
         )}
 
-        {/* Arrow or Clear Button */}
+        {/* Clear search or arrow icon */}
         {!selectedProduct && (
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
             {searchQuery ? (
@@ -250,7 +225,7 @@ export function ProductSearchSelect({
                   e.stopPropagation();
                   setSearchQuery('');
                 }}
-                className="p-0.5 rounded text-slate-400 hover:text-slate-600"
+                className="p-0.5 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -281,39 +256,52 @@ export function ProductSearchSelect({
             }}
             className="bg-white border border-slate-200/90 rounded-2xl shadow-2xl max-h-72 overflow-y-auto divide-y divide-slate-100 font-bengali animate-in fade-in-50 zoom-in-95 duration-100"
           >
-            <div className="p-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-500">
-              <span>ক্যাটাগরি: <strong className="text-orange-600">{activeTab}</strong> ({filteredProducts.length} টি পণ্য পাওয়া গেছে)</span>
-              {searchQuery && <span>সার্চ: &quot;{searchQuery}&quot;</span>}
-            </div>
-
             {filteredProducts.length > 0 ? (
               <div className="py-1">
-                {filteredProducts.map((prod) => {
-                  const isSelected = selectedProductId === prod.id;
-                  const isOutOfStock = prod.stock !== undefined && prod.stock <= 0;
+                {filteredProducts.map((prod, index) => {
+                  const isSelected = selectedProduct?.id === prod.id;
+                  const isHighlighted = highlightedIndex === index;
                   return (
                     <div
                       key={prod.id}
-                      onClick={() => !isOutOfStock && handleSelect(prod)}
+                      onClick={() => handleSelect(prod)}
+                      onMouseEnter={() => setHighlightedIndex(index)}
                       className={cn(
                         'px-3.5 py-2.5 text-xs flex items-center justify-between cursor-pointer transition-colors',
-                        isOutOfStock ? 'opacity-50 cursor-not-allowed bg-slate-50/50' : isSelected ? 'bg-amber-50/90 text-amber-900 font-bold border-l-2 border-[#b88e2d]' : 'hover:bg-[#faf8f5] text-slate-700'
+                        isSelected
+                          ? 'bg-amber-50/90 text-amber-900 font-bold border-l-2 border-[#b88e2d]'
+                          : isHighlighted
+                          ? 'bg-slate-100/80 text-slate-900'
+                          : 'hover:bg-slate-50 text-slate-700'
                       )}
                     >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2 font-black text-slate-900 text-xs">
-                          <span>{formatProductName(prod.name, prod.category)}</span>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2 font-bold text-slate-900 text-xs">
+                          <span>{prod.name}</span>
+                          {prod.brand && (
+                            <span className="text-[11px] text-slate-500 font-normal">({prod.brand})</span>
+                          )}
                           {prod.category && (
-                            <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                            <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded">
                               {prod.category}
                             </span>
                           )}
+                          {prod.code && (
+                            <span className="text-[10px] text-slate-400 font-mono">#{prod.code}</span>
+                          )}
                         </div>
-                        <div className="flex items-center gap-3 text-[11px]">
-                          <span className="font-black text-orange-600">৳{prod.sellPrice.toLocaleString()} {prod.unit ? `/${prod.unit}` : ''}</span>
-                          {prod.stock !== undefined && (
-                            <span className={cn("font-bold", isOutOfStock ? "text-rose-600" : "text-emerald-600")}>
-                              {isOutOfStock ? 'স্টক শেষ' : `স্টক: ${prod.stock} ${prod.unit || ''}`}
+                        <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                          <span className="text-slate-700 font-bold">
+                            দর: ৳{toBengaliDigits(prod.sellPrice || 0)}/{prod.unit || 'পিস'}
+                          </span>
+                          <span>•</span>
+                          {(prod.stock || 0) > 0 ? (
+                            <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[10px]">
+                              মজুদ: {toBengaliDigits(prod.stock || 0)} {prod.unit || 'পিস'}
+                            </span>
+                          ) : (
+                            <span className="font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 text-[10px]">
+                              স্টক শেষ (০ {prod.unit || 'পিস'})
                             </span>
                           )}
                         </div>
@@ -327,10 +315,10 @@ export function ProductSearchSelect({
                 })}
               </div>
             ) : (
-              <div className="p-5 text-center space-y-1">
-                <Package className="w-6 h-6 text-slate-300 mx-auto mb-1" />
-                <p className="text-xs text-slate-400 font-bold">
-                  {activeTab === 'সব' ? 'কোনো পণ্য পাওয়া যায়নি' : `"${activeTab}" ক্যাটাগরিতে কোনো পণ্য পাওয়া যায়নি`}
+              <div className="p-4 text-center space-y-1">
+                <p className="text-xs text-slate-400 font-bold">কোনো পণ্য পাওয়া যায়নি</p>
+                <p className="text-[10px] text-slate-400">
+                  ইনভেন্টরি পেজ থেকে পণ্য যোগ করুন অথবা অন্য নামে সার্চ করুন
                 </p>
               </div>
             )}

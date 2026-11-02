@@ -27,13 +27,13 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'মেসার্স দেলোয়ার এন্ড ব্রাদার্স - রড ও সিমেন্ট ইআরপি',
-  description: 'মেসার্স দেলোয়ার এন্ড ব্রাদার্স - রড ও সিমেন্টের দোকানের সম্পূর্ণ ডিজিটাল ব্যবসা পরিচালনা ব্যবস্থা',
+  title: 'স্মার্ট বিজনেস ইআরপি - ইউনিভার্সাল শপ ম্যানেজমেন্ট',
+  description: 'দোকান ও ব্যবসা প্রতিষ্ঠানের সম্পূর্ণ ডিজিটাল ক্রয়-বিক্রয়, স্টক ও হিসাব পরিচালনা ব্যবস্থা',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'দেলোয়ার ব্রাদার্স',
+    title: 'স্মার্ট ইআরপি',
   },
   formatDetection: {
     telephone: false,

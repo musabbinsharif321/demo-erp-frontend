@@ -89,7 +89,7 @@ export const PurchaseInvoiceMemo: React.FC<PurchaseInvoiceMemoProps> = ({
     const defaultShop = {
       name: 'মেসার্স দেলোয়ার এন্ড ব্রাদার্স',
       proprietor: 'প্রোঃ- মোঃ মিকাইল শেখ',
-      tagline: 'রড, সিমেন্ট ও বিল্ডিং সামগ্রী পাইকারী ও খুচরা সরবরাহ কেন্দ্র',
+      tagline: 'পাইকারী ও খুচরা বিক্রয় কেন্দ্র',
       address: '৩১০, চৌধুরী নিউ সুপার মার্কেট, বঙ্গবন্ধু সড়ক, গোপালগঞ্জ',
       phone: '০১৭১২-০১৪২২৫, ০১৭০১-২৯৫৩৩০',
       email: 'delowarteraders@gmail.com',

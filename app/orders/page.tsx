@@ -25,7 +25,7 @@ import { InvoiceMemo } from '@/components/InvoiceMemo';
 import { printElement } from '@/lib/printUtils';
 import { toBengaliDigits, toEnglishDigits, formatProductName } from '@/lib/bengaliUtils';
 import { CustomerSearchSelect } from '@/components/CustomerSearchSelect';
-import { ProductSearchSelect } from '@/components/ProductSearchSelect';
+import { ProductSearchSelect, ProductOption } from '@/components/ProductSearchSelect';
 import { CascadingProductSelector, SelectedProductDetails } from '@/components/CascadingProductSelector';
 import { CartItemQtyInput } from '@/components/CartItemQtyInput';
 import { BengaliDateRangePicker } from '@/components/ui/BengaliDateRangePicker';
@@ -39,6 +39,7 @@ interface Product {
   stock: number; 
   unit: string; 
   category: string; 
+  brand?: string;
   code?: string;
 }
 
@@ -197,6 +198,7 @@ export default function OrdersPage() {
   // Cart & Item Selector States
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [selectedOrderProduct, setSelectedOrderProduct] = useState<ProductOption | null>(null);
   const [selectedCascadingProduct, setSelectedCascadingProduct] = useState<SelectedProductDetails | null>(null);
   const [itemQty, setItemQty] = useState<number>(1);
   const [itemPrice, setItemPrice] = useState<number>(0);
@@ -279,11 +281,13 @@ export default function OrdersPage() {
       const prodList = await api.inventory.list();
       setProducts(prodList.map(p => ({
         id: String(p.id),
-        name: formatProductName(p.name, p.category_name),
+        name: p.name,
         sellPrice: Number(p.sell_price || 0),
         stock: Number(p.stock || 0),
         unit: p.unit || 'পিস',
-        category: p.category_name || 'অন্যান্য'
+        category: p.category_name || 'সাধারণ',
+        brand: p.brand || '',
+        code: p.sku || ''
       })));
 
       const partyList = await api.parties.list({ party_type: 'customer' });
@@ -429,26 +433,29 @@ export default function OrdersPage() {
 
   // Cart Add Item with Bundle/Piece option
   const handleAddCartItem = () => {
-    const itemName = selectedCascadingProduct?.name || products.find(p => p.id === selectedProductId)?.name;
+    const itemName = selectedOrderProduct?.name || selectedCascadingProduct?.name || products.find(p => p.id === selectedProductId)?.name;
     if (!itemName) {
       toast.error('পণ্য নির্বাচন করুন');
       return;
     }
 
-    if (selectedCascadingProduct && selectedCascadingProduct.stock <= 0) {
-      toast.error('পণ্যটি স্টকে নেই! বিক্রয় অর্ডারে কেবল স্টকে থাকা পণ্য যোগ করা যাবে।');
-      return;
+    const targetProdId = selectedOrderProduct?.id || selectedCascadingProduct?.productId || selectedProductId;
+    const foundProd = selectedOrderProduct || products.find(p => p.id === targetProdId || p.name === itemName);
+    const availableStock = Number(selectedOrderProduct?.stock ?? foundProd?.stock ?? selectedCascadingProduct?.stock ?? 0);
+
+    if (availableStock <= 0) {
+      toast.warning(`⚠️ সতর্কতা: '${itemName}' পণ্যটির বর্তমান স্টক ০! অর্ডারে যুক্ত করা হয়েছে।`);
     }
 
-    const isRing = (selectedCascadingProduct?.category === 'রিং') || (itemName || '').includes('রিং');
-    const itemUnitToUse = isRing ? 'কেজি' : (selectedCascadingProduct?.unit || 'বস্তা/কেজি');
-    const itemId = selectedCascadingProduct?.productId || selectedProductId || String(Date.now());
-    const finalPrice = selectedCascadingProduct?.price || 0;
+    const isRing = (selectedOrderProduct?.category === 'রিং') || (selectedCascadingProduct?.category === 'রিং') || (itemName || '').includes('রিং');
+    const itemUnitToUse = selectedOrderProduct?.unit || (isRing ? 'কেজি' : (selectedCascadingProduct?.unit || (foundProd as any)?.unit || itemUnit || 'পিস'));
+    const itemId = selectedOrderProduct?.id || selectedCascadingProduct?.productId || selectedProductId || String(Date.now());
+    const finalPrice = itemPrice || selectedOrderProduct?.sellPrice || selectedCascadingProduct?.price || (foundProd as any)?.sellPrice || 0;
 
     setCart(prev => {
-      const existing = prev.find(i => i.name === itemName);
+      const existing = prev.find(i => i.name === itemName || String(i.id) === String(itemId));
       if (existing) {
-        return prev.map(i => i.name === itemName ? { 
+        return prev.map(i => (i.name === itemName || String(i.id) === String(itemId)) ? { 
           ...i, 
           quantity: Math.round((i.quantity + itemQty) * 100) / 100, 
           price: finalPrice || i.price,
@@ -459,6 +466,8 @@ export default function OrdersPage() {
       return [...prev, {
         id: itemId,
         name: itemName,
+        category: selectedOrderProduct?.category || selectedCascadingProduct?.category || (foundProd as any)?.category,
+        brand: (selectedOrderProduct as any)?.brand || selectedCascadingProduct?.brand || (foundProd as any)?.brand,
         unit: itemUnitToUse,
         price: finalPrice,
         quantity: itemQty,
@@ -467,6 +476,8 @@ export default function OrdersPage() {
       }];
     });
 
+    setSelectedOrderProduct(null);
+    setSelectedCascadingProduct(null);
     setSelectedProductId('');
     setItemQty(1);
     setItemPrice(0);
@@ -513,8 +524,11 @@ export default function OrdersPage() {
     setSaveSiteForFuture(true);
     setCart([]);
     setSelectedProductId('');
+    setSelectedOrderProduct(null);
+    setSelectedCascadingProduct(null);
     setItemQty(1);
     setItemPrice(0);
+    setItemUnit('পিস');
     setItemDiscount(0);
     setBundleCount('');
     setTransportCost(0);
@@ -1395,23 +1409,110 @@ export default function OrdersPage() {
                       <ShoppingCart className="w-4 h-4 text-emerald-600" /> পণ্য যোগ করুন
                     </h2>
 
-                    {/* Step-by-Step Cascading Product Selector */}
-                    <CascadingProductSelector
-                      products={products}
-                      onlyInStock={true}
-                      onProductChange={(selected) => {
-                        setSelectedCascadingProduct(selected);
-                        if (selected && selected.productId) {
-                          setSelectedProductId(selected.productId);
-                        }
-                      }}
-                      showPriceField={false}
-                      itemQty={itemQty}
-                      onQtyChange={setItemQty}
-                      itemPrice={itemPrice}
-                      onPriceChange={setItemPrice}
-                      onAddCartItem={handleAddCartItem}
-                    />
+                    {/* Unified Single-Field Product Selector (Search + Dropdown combined) */}
+                    <div className="bg-slate-50/90 border border-slate-200/90 rounded-lg p-3 sm:p-4 space-y-3 font-bengali shadow-xs">
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        {/* 1. Single Input Field (Dropdown + Search) */}
+                        <div className="md:col-span-5 space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                            <span>পণ্য নির্বাচন করুন <span className="text-rose-500">*</span></span>
+                            {selectedOrderProduct && (
+                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                মজুদ স্টক: {toBengaliDigits(selectedOrderProduct.stock ?? 0)} {selectedOrderProduct.unit || 'পিস'}
+                              </span>
+                            )}
+                          </Label>
+                          <ProductSearchSelect
+                            products={products as any}
+                            selectedProduct={selectedOrderProduct}
+                            onSelectProduct={(prod) => {
+                              setSelectedOrderProduct(prod);
+                              if (prod) {
+                                setSelectedProductId(prod.id);
+                                setItemPrice(prod.sellPrice || 0);
+                                setItemUnit(prod.unit || 'পিস');
+                              } else {
+                                setSelectedProductId('');
+                                setItemPrice(0);
+                                setItemUnit('পিস');
+                              }
+                            }}
+                            placeholder="পণ্য সার্চ করুন বা ড্রপডাউনে ক্লিক করুন..."
+                            onlyInStock={true}
+                          />
+                        </div>
+
+                        {/* 2. Quantity Input */}
+                        <div className="md:col-span-2 space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                            <span>পরিমাণ <span className="text-rose-500">*</span></span>
+                            <span className="text-[10px] text-slate-500 font-bold">({selectedOrderProduct?.unit || itemUnit || 'পিস'})</span>
+                          </Label>
+                          <Input
+                            type="number"
+                            min="0.01"
+                            step="any"
+                            value={itemQty || ''}
+                            onChange={(e) => setItemQty(parseFloat(e.target.value) || 0)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddCartItem();
+                              }
+                            }}
+                            placeholder="১"
+                            className="h-10 bg-white border-slate-300 font-bold text-center text-sm"
+                          />
+                        </div>
+
+                        {/* 3. Sell Rate Input */}
+                        <div className="md:col-span-2 space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-700">দর (৳)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={itemPrice || ''}
+                            onChange={(e) => setItemPrice(parseFloat(e.target.value) || 0)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddCartItem();
+                              }
+                            }}
+                            placeholder="০.০০"
+                            className="h-10 bg-white border-slate-300 font-bold text-center text-sm"
+                          />
+                        </div>
+
+                        {/* 4. Subtotal Preview */}
+                        <div className="md:col-span-1 space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-500">মোট (৳)</Label>
+                          <div className="h-10 bg-slate-100 border border-slate-200 rounded-md flex items-center justify-center font-black text-slate-800 text-xs px-1 overflow-hidden">
+                            ৳{toBengaliDigits(Math.round((itemQty * itemPrice) * 100) / 100 || 0)}
+                          </div>
+                        </div>
+
+                        {/* 5. Add to Cart Button */}
+                        <div className="md:col-span-2">
+                          <Button
+                            type="button"
+                            onClick={handleAddCartItem}
+                            disabled={!selectedOrderProduct && !selectedProductId}
+                            className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-md shadow-xs flex items-center justify-center gap-1.5 transition-all disabled:opacity-40"
+                          >
+                            <Plus className="w-4 h-4" /> কার্টে যোগ করুন
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Over-stock Warning Indicator */}
+                      {selectedOrderProduct && itemQty > (selectedOrderProduct.stock ?? 0) && (
+                        <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 p-2 rounded-md flex items-center gap-1.5">
+                          <span>⚠️ সতর্কবার্তা: স্টকে মাত্র {toBengaliDigits(selectedOrderProduct.stock ?? 0)} {selectedOrderProduct.unit || 'পিস'} রয়েছে। আপনি কার্টে {toBengaliDigits(itemQty)} দিয়েছেন!</span>
+                        </div>
+                      )}
+                    </div>
 
                     {/* 4. CART ITEMS TABLE */}
                     <div className="space-y-3 pt-2">
@@ -1438,7 +1539,7 @@ export default function OrdersPage() {
                                   <TableCell className="font-bold text-slate-900">
                                     <span className="flex items-center gap-2">
                                       <span className="w-6 h-6 rounded-md bg-slate-100 flex items-center justify-center text-slate-600 text-[10px]">
-                                        {item.unit === 'কেজি' ? '🥢' : '🛢️'}
+                                        📦
                                       </span>
                                       {item.name}
                                     </span>

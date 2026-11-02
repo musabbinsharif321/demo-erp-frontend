@@ -840,9 +840,10 @@ export default function PartyManagementPage({ type }: PartyManagementPageProps) 
                       </>
                     ) : (
                       <>
-                        <SelectItem value="রড">রড</SelectItem>
-                        <SelectItem value="সিমেন্ট">সিমেন্ট</SelectItem>
-                        <SelectItem value="রড ও সিমেন্ট">রড ও সিমেন্ট</SelectItem>
+                        <SelectItem value="সাধারণ সরবরাহকারী">সাধারণ সরবরাহকারী</SelectItem>
+                        <SelectItem value="পাইকারি সরবরাহকারী">পাইকারি সরবরাহকারী</SelectItem>
+                        <SelectItem value="কোম্পানি ডিলার">কোম্পানি ডিলার</SelectItem>
+                        <SelectItem value="রড ও সিমেন্ট">রড ও নির্মাণ সামগ্রী</SelectItem>
                         <SelectItem value="অন্যান্য">অন্যান্য</SelectItem>
                       </>
                     )}
@@ -1766,10 +1767,11 @@ export default function PartyManagementPage({ type }: PartyManagementPageProps) 
                               </>
                             ) : (
                               <>
-                                <SelectItem value="রড">🧱 রড সরবরাহকারী</SelectItem>
-                                <SelectItem value="সিমেন্ট">🏗️ সিমেন্ট সরবরাহকারী</SelectItem>
-                                <SelectItem value="রড ও সিমেন্ট">🏢 রড ও সিমেন্ট সরবরাহকারী</SelectItem>
-                                <SelectItem value="অন্যান্য">📦 সাধারণ / অন্যান্য সরবরাহকারী</SelectItem>
+                                <SelectItem value="সাধারণ সরবরাহকারী">📦 সাধারণ সরবরাহকারী (General)</SelectItem>
+                                <SelectItem value="পাইকারি সরবরাহকারী">🏬 পাইকারি সরবরাহকারী (Wholesale)</SelectItem>
+                                <SelectItem value="কোম্পানি ডিলার">🏢 কোম্পানি ডিলার / পরিবেশক</SelectItem>
+                                <SelectItem value="রড ও সিমেন্ট">🧱 রড ও নির্মাণ সামগ্রী সরবরাহকারী</SelectItem>
+                                <SelectItem value="অন্যান্য">✨ অন্যান্য</SelectItem>
                               </>
                             )}
                           </SelectContent>

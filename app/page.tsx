@@ -524,13 +524,14 @@ export default function Dashboard() {
       ...cementBrandLines
     ];
 
-    const fullDailyReportText = `===দেলোয়ার এন্ড ব্রাদার্স ===
-         গোপালগঞ্জ শাখা
-==== ডেইলি রিপোর্ট ====
+    const hasConst = products.some(p => isRodProduct(p) || isCementProduct(p));
+    const storeTitle = typeof window !== 'undefined' ? localStorage.getItem('store_name') || 'দৈনিক হিসাব ও ক্লোজিং রিপোর্ট' : 'দৈনিক হিসাব ও ক্লোজিং রিপোর্ট';
+
+    const fullDailyReportText = `==== ${storeTitle} ====
 তারিখ - ${dateFormattedBn}
 
 ১/ ক্যাশ = ${totalCashBalance !== 0 ? toBengaliDigits(Math.round(totalCashBalance).toLocaleString('en-IN')) : '০০'} ৳
-২/ চেক = ${dayChequeAmount > 0 ? `${toBengaliDigits(dayChequeAmount.toLocaleString('en-IN'))} ৳/` : '০/'}
+২/ চেক = ${dayChequeAmount > 0 ? `${toBengaliDigits(dayChequeAmount.toLocaleString('en-IN'))} ৳/` : '০/'}` + (hasConst ? `
     =====সিমেন্ট =====
 ${cementBlockLines.join('\n')}
 
@@ -539,7 +540,10 @@ ${cementBlockLines.join('\n')}
 রড বিক্রয় = ${formatRodVal(rodSoldKg)}
 ${dayRodReturnKg > 0 ? `রড ফেরত = ${formatRodVal(dayRodReturnKg, true)}\n` : ''}রড প্রাপ্তি = ${formatRodVal(rodBoughtKg, true)}
 রড সরাসরি= ${formatRodVal(rodDirectKg, true)}
-রড স্টক = ${formatRodVal(totalRodStockKg, true)}`;
+রড স্টক = ${formatRodVal(totalRodStockKg, true)}` : `
+    ===== স্টক সারাংশ =====
+মোট পণ্য পদ/প্রকার = ${toBengaliDigits(products.length)} টি
+মোট মজুদ পরিমাণ = ${toBengaliDigits(Math.round(products.reduce((s, p) => s + (Number(p.stock) || 0), 0)).toLocaleString('en-IN'))} একক`);
 
     return {
       dateFormattedBn,
@@ -564,7 +568,7 @@ ${dayRodReturnKg > 0 ? `রড ফেরত = ${formatRodVal(dayRodReturnKg, tru
     if (dailyReportData?.fullDailyReportText) {
       navigator.clipboard.writeText(dailyReportData.fullDailyReportText);
       setCopiedReport(true);
-      toast.success('মেসার্স দেলোয়ার এন্ড ব্রাদার্স ডেইলি রিপোর্ট কপি করা হয়েছে!');
+      toast.success('দৈনিক হিসাব রিপোর্ট কপি করা হয়েছে!');
       setTimeout(() => setCopiedReport(false), 2500);
     }
   };
@@ -616,6 +620,7 @@ ${dayRodReturnKg > 0 ? `রড ফেরত = ${formatRodVal(dayRodReturnKg, tru
     let rodTotalKg = 0;
     let cementTotalAmount = 0;
     let cementTotalBags = 0;
+    let monthlyTotalUnits = 0;
 
     orders.forEach(o => {
       const d = safeParseDate(o.createdAt);
@@ -627,6 +632,7 @@ ${dayRodReturnKg > 0 ? `রড ফেরত = ${formatRodVal(dayRodReturnKg, tru
           const itemTotal = Number(i.total || (Number(i.quantity || 0) * Number(i.price || 0)));
           const qty = Number(i.quantity || 0);
           const u = (i.unit || '').toLowerCase();
+          monthlyTotalUnits += qty;
 
           if (isCementProduct(i)) {
             cementTotalAmount += itemTotal;
@@ -658,6 +664,8 @@ ${dayRodReturnKg > 0 ? `রড ফেরত = ${formatRodVal(dayRodReturnKg, tru
       cementTotalAmount,
       cementTotalBags,
       cementBagsStr: `${toBengaliDigits(cementBagsFormatted)} ব্যাগ`,
+      monthlyTotalUnits,
+      monthlyTotalUnitsStr: `${toBengaliDigits(Math.round(monthlyTotalUnits).toLocaleString('en-IN'))} ইউনিট`,
     };
   }, [orders]);
 
@@ -759,6 +767,14 @@ ${dayRodReturnKg > 0 ? `রড ফেরত = ${formatRodVal(dayRodReturnKg, tru
         stockFormatted: `${toBengaliDigits(stock.toLocaleString('en-IN'))} ${unit}`
       };
     });
+  }, [products]);
+
+  const hasConstructionProducts = useMemo(() => {
+    return products.some(p => isRodProduct(p) || isCementProduct(p));
+  }, [products]);
+
+  const totalStockUnits = useMemo(() => {
+    return products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
   }, [products]);
 
   const filteredProductPrices = useMemo(() => {
@@ -869,37 +885,75 @@ ${dayRodReturnKg > 0 ? `রড ফেরত = ${formatRodVal(dayRodReturnKg, tru
             graphData={weeklyData.map(d => ({ v: Math.max(0, d.বিক্রয় - d.ক্রয়) }))}
           />
 
-          {/* CARD 4: MONTHLY ROD SALES */}
-          <StatCard 
-            title="চলতি মাসের রড বিক্রি" 
-            value={monthlyRodAndCementSales.rodDisplayMain} 
-            subValue={monthlyRodAndCementSales.rodDisplaySub || undefined}
-            icon={TrendingUp} 
-            trend="রড সেলস" 
-            trendUp={true} 
-            description="চলতি মাসের মোট রড"
-            bg="bg-gradient-to-br from-[#8c6b1c] via-[#b88e2d] to-[#d4af37]"
-            iconBg="bg-amber-100/90 text-amber-800"
-            badgeBg="bg-amber-100 text-amber-800"
-            graphType="double-line"
-            strokeColor="#b88e2d"
-            graphData={weeklyCategoryTrend.map(d => ({ v: d.rodKg, t: d.rodKg * 0.7 }))}
-          />
+          {/* CARD 4 & 5: DYNAMICALLY ADAPT FOR GENERAL VS CONSTRUCTION STORES */}
+          {hasConstructionProducts ? (
+            <>
+              {/* CARD 4: MONTHLY ROD SALES */}
+              <StatCard 
+                title="চলতি মাসের রড বিক্রি" 
+                value={monthlyRodAndCementSales.rodDisplayMain} 
+                subValue={monthlyRodAndCementSales.rodDisplaySub || undefined}
+                icon={TrendingUp} 
+                trend="রড সেলস" 
+                trendUp={true} 
+                description="চলতি মাসের মোট রড"
+                bg="bg-gradient-to-br from-[#8c6b1c] via-[#b88e2d] to-[#d4af37]"
+                iconBg="bg-amber-100/90 text-amber-800"
+                badgeBg="bg-amber-100 text-amber-800"
+                graphType="double-line"
+                strokeColor="#b88e2d"
+                graphData={weeklyCategoryTrend.map(d => ({ v: d.rodKg, t: d.rodKg * 0.7 }))}
+              />
 
-          {/* CARD 5: MONTHLY CEMENT SALES */}
-          <StatCard 
-            title="চলতি মাসের সিমেন্ট বিক্রি" 
-            value={monthlyRodAndCementSales.cementBagsStr} 
-            icon={PackageCheck} 
-            trend="সিমেন্ট সেলস" 
-            trendUp={true} 
-            description="চলতি মাসের মোট সিমেন্ট"
-            bg="bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600"
-            iconBg="bg-amber-100 text-amber-800"
-            badgeBg="bg-amber-100 text-amber-800"
-            graphType="segmented-bars"
-            graphData={weeklyCategoryTrend.map(d => ({ v: d.cementBags }))}
-          />
+              {/* CARD 5: MONTHLY CEMENT SALES */}
+              <StatCard 
+                title="চলতি মাসের সিমেন্ট বিক্রি" 
+                value={monthlyRodAndCementSales.cementBagsStr} 
+                icon={PackageCheck} 
+                trend="সিমেন্ট সেলস" 
+                trendUp={true} 
+                description="চলতি মাসের মোট সিমেন্ট"
+                bg="bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600"
+                iconBg="bg-amber-100 text-amber-800"
+                badgeBg="bg-amber-100 text-amber-800"
+                graphType="segmented-bars"
+                graphData={weeklyCategoryTrend.map(d => ({ v: d.cementBags }))}
+              />
+            </>
+          ) : (
+            <>
+              {/* CARD 4: MONTHLY TOTAL UNITS SOLD */}
+              <StatCard 
+                title="চলতি মাসের বিক্রি পরিমাণ" 
+                value={monthlyRodAndCementSales.monthlyTotalUnitsStr} 
+                icon={TrendingUp} 
+                trend="মোট বিক্রি" 
+                trendUp={true} 
+                description="চলতি মাসের পণ্যের মোট একক"
+                bg="bg-gradient-to-br from-indigo-500 via-indigo-600 to-blue-700"
+                iconBg="bg-indigo-100 text-indigo-700"
+                badgeBg="bg-indigo-100 text-indigo-800"
+                graphType="double-line"
+                strokeColor="#6366f1"
+                graphData={weeklyData.map(d => ({ v: d.বিক্রয়, t: d.ক্রয় }))}
+              />
+
+              {/* CARD 5: TOTAL CURRENT INVENTORY UNITS */}
+              <StatCard 
+                title="দোকানে মোট মজুদ পণ্য" 
+                value={`${toBengaliDigits(Math.round(totalStockUnits).toLocaleString('en-IN'))} একক`} 
+                icon={PackageCheck} 
+                trend={`${toBengaliDigits(products.length)} ধরনের আইটেম`} 
+                trendUp={true} 
+                description="বর্তমান সক্রিয় পণ্যের মোট স্টক"
+                bg="bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700"
+                iconBg="bg-emerald-100 text-emerald-800"
+                badgeBg="bg-emerald-100 text-emerald-800"
+                graphType="segmented-bars"
+                graphData={weeklyData.map(d => ({ v: d.ক্রয় }))}
+              />
+            </>
+          )}
         </div>
 
         {/* ==================== QUICK SHORTCUTS ROW (FULL WIDTH BALANCED 6-COL TILES) ==================== */}
@@ -1123,106 +1177,152 @@ ${dayRodReturnKg > 0 ? `রড ফেরত = ${formatRodVal(dayRodReturnKg, tru
                 </div>
               </div>
 
-              {/* 1. Cement Closing */}
-              <div className="bg-gradient-to-br from-blue-50/60 via-white to-sky-50/40 border border-blue-200/80 rounded-2xl p-3 space-y-2">
-                <div className="flex items-center justify-between border-b border-blue-200/60 pb-1.5">
-                  <span className="font-black text-blue-950 text-xs flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-blue-600" />
-                    সিমেন্ট ক্লোজিং
-                  </span>
-                  <span className="text-[9px] font-black bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md">
-                    ব্যাগ হিসাব
-                  </span>
-                </div>
+              {hasConstructionProducts ? (
+                <>
+                  {/* 1. Cement Closing */}
+                  <div className="bg-gradient-to-br from-blue-50/60 via-white to-sky-50/40 border border-blue-200/80 rounded-2xl p-3 space-y-2">
+                    <div className="flex items-center justify-between border-b border-blue-200/60 pb-1.5">
+                      <span className="font-black text-blue-950 text-xs flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-blue-600" />
+                        সিমেন্ট ক্লোজিং
+                      </span>
+                      <span className="text-[9px] font-black bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md">
+                        ব্যাগ হিসাব
+                      </span>
+                    </div>
 
-                <div className="grid grid-cols-4 gap-1.5 text-center">
-                  <div className="bg-white border border-blue-100 rounded-xl p-1.5 shadow-2xs">
-                    <p className="text-[8.5px] font-bold text-slate-500 leading-none">বিক্রয়</p>
-                    <p className="text-xs sm:text-sm font-black text-blue-700 mt-1">
-                      {dailyReportData.formatQtyOrZero(dailyReportData.cementSoldBags)}
-                    </p>
-                  </div>
-                  <div className="bg-white border border-emerald-100 rounded-xl p-1.5 shadow-2xs">
-                    <p className="text-[8.5px] font-bold text-slate-500 leading-none">প্রাপ্তি</p>
-                    <p className="text-xs sm:text-sm font-black text-emerald-700 mt-1">
-                      {dailyReportData.formatQtyOrZero(dailyReportData.cementBoughtBags)}
-                    </p>
-                  </div>
-                  <div className="bg-white border border-amber-100 rounded-xl p-1.5 shadow-2xs">
-                    <p className="text-[8.5px] font-bold text-slate-500 leading-none">সরাসরি</p>
-                    <p className="text-xs sm:text-sm font-black text-amber-700 mt-1">
-                      {dailyReportData.formatQtyOrZero(dailyReportData.cementDirectBags)}
-                    </p>
-                  </div>
-                  <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl p-1.5 shadow-2xs">
-                    <p className="text-[8.5px] font-bold text-indigo-900 leading-none">স্টক</p>
-                    <p className="text-xs sm:text-sm font-black text-indigo-700 mt-1">
-                      {dailyReportData.formatQtyOrZero(dailyReportData.totalCementStockBags)}
-                    </p>
-                  </div>
-                </div>
+                    <div className="grid grid-cols-4 gap-1.5 text-center">
+                      <div className="bg-white border border-blue-100 rounded-xl p-1.5 shadow-2xs">
+                        <p className="text-[8.5px] font-bold text-slate-500 leading-none">বিক্রয়</p>
+                        <p className="text-xs sm:text-sm font-black text-blue-700 mt-1">
+                          {dailyReportData.formatQtyOrZero(dailyReportData.cementSoldBags)}
+                        </p>
+                      </div>
+                      <div className="bg-white border border-emerald-100 rounded-xl p-1.5 shadow-2xs">
+                        <p className="text-[8.5px] font-bold text-slate-500 leading-none">প্রাপ্তি</p>
+                        <p className="text-xs sm:text-sm font-black text-emerald-700 mt-1">
+                          {dailyReportData.formatQtyOrZero(dailyReportData.cementBoughtBags)}
+                        </p>
+                      </div>
+                      <div className="bg-white border border-amber-100 rounded-xl p-1.5 shadow-2xs">
+                        <p className="text-[8.5px] font-bold text-slate-500 leading-none">সরাসরি</p>
+                        <p className="text-xs sm:text-sm font-black text-amber-700 mt-1">
+                          {dailyReportData.formatQtyOrZero(dailyReportData.cementDirectBags)}
+                        </p>
+                      </div>
+                      <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl p-1.5 shadow-2xs">
+                        <p className="text-[8.5px] font-bold text-indigo-900 leading-none">স্টক</p>
+                        <p className="text-xs sm:text-sm font-black text-indigo-700 mt-1">
+                          {dailyReportData.formatQtyOrZero(dailyReportData.totalCementStockBags)}
+                        </p>
+                      </div>
+                    </div>
 
-                {dailyReportData.realCementList.length > 0 && (
-                  <div className="bg-white/80 border border-blue-100 rounded-xl p-2 space-y-1 shadow-2xs">
-                    <p className="text-[8.5px] font-bold text-slate-500">ব্র্যান্ড অনুযায়ী মজুদ:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {dailyReportData.realCementList.map((b, idx) => (
-                        <span key={idx} className="inline-flex items-center gap-1 text-[9px] font-bold bg-blue-50 text-blue-900 border border-blue-200/80 px-1.5 py-0.5 rounded-md">
-                          <span>{b.name}:</span>
-                          <span className="font-black text-blue-700">{dailyReportData.formatQtyOrZero(b.stock)} ব্যাগ</span>
-                        </span>
-                      ))}
+                    {dailyReportData.realCementList.length > 0 && (
+                      <div className="bg-white/80 border border-blue-100 rounded-xl p-2 space-y-1 shadow-2xs">
+                        <p className="text-[8.5px] font-bold text-slate-500">ব্র্যান্ড অনুযায়ী মজুদ:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {dailyReportData.realCementList.map((b, idx) => (
+                            <span key={idx} className="inline-flex items-center gap-1 text-[9px] font-bold bg-blue-50 text-blue-900 border border-blue-200/80 px-1.5 py-0.5 rounded-md">
+                              <span>{b.name}:</span>
+                              <span className="font-black text-blue-700">{dailyReportData.formatQtyOrZero(b.stock)} ব্যাগ</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. Rod Closing */}
+                  <div className="bg-gradient-to-br from-orange-50/60 via-white to-amber-50/40 border border-orange-200/80 rounded-2xl p-3 space-y-2">
+                    <div className="flex items-center justify-between border-b border-orange-200/60 pb-1.5">
+                      <span className="font-black text-orange-950 text-xs flex items-center gap-1.5">
+                        <Scale className="w-3.5 h-3.5 text-orange-600" />
+                        রড ও রিং ক্লোজিং
+                      </span>
+                      <span className="text-[9px] font-black bg-orange-100 text-orange-800 px-2 py-0.5 rounded-md">
+                        কেজি হিসাব
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-1.5 text-center">
+                      <div className="bg-white border border-orange-100 rounded-xl p-1.5 shadow-2xs">
+                        <p className="text-[8.5px] font-bold text-slate-500 leading-none">বিক্রয়</p>
+                        <p className="text-xs sm:text-sm font-black text-orange-700 mt-1">
+                          {dailyReportData.formatRodVal(dailyReportData.rodSoldKg)}
+                        </p>
+                      </div>
+                      <div className="bg-white border border-emerald-100 rounded-xl p-1.5 shadow-2xs">
+                        <p className="text-[8.5px] font-bold text-slate-500 leading-none">প্রাপ্তি</p>
+                        <p className="text-xs sm:text-sm font-black text-emerald-700 mt-1">
+                          {dailyReportData.formatRodVal(dailyReportData.rodBoughtKg, true)}
+                        </p>
+                      </div>
+                      <div className="bg-white border border-amber-100 rounded-xl p-1.5 shadow-2xs">
+                        <p className="text-[8.5px] font-bold text-slate-500 leading-none">সরাসরি</p>
+                        <p className="text-xs sm:text-sm font-black text-amber-700 mt-1">
+                          {dailyReportData.formatRodVal(dailyReportData.rodDirectKg, true)}
+                        </p>
+                      </div>
+                      <div className="bg-amber-50/80 border border-amber-300 rounded-xl p-1.5 shadow-2xs">
+                        <p className="text-[8.5px] font-bold text-amber-900 leading-none">স্টক</p>
+                        <p className="text-xs sm:text-sm font-black text-amber-800 mt-1">
+                          {dailyReportData.formatRodVal(dailyReportData.totalRodStockKg, true)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-white/80 border border-orange-100 rounded-xl p-2 flex items-center justify-between text-xs shadow-2xs">
+                      <span className="text-[9.5px] font-bold text-slate-600">মোট রড ও রিং মজুদ:</span>
+                      <span className="font-black text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-md text-[10px]">
+                        {dailyReportData.formatRodVal(dailyReportData.totalRodStockKg, true)}
+                      </span>
                     </div>
                   </div>
-                )}
-              </div>
+                </>
+              ) : (
+                /* Universal Products Stock & Daily Summary */
+                <div className="bg-gradient-to-br from-indigo-50/60 via-white to-blue-50/40 border border-indigo-200/80 rounded-2xl p-3 space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-indigo-200/60 pb-1.5">
+                    <span className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5 text-indigo-600" />
+                      দোকানের পণ্য ও মজুদ সারাংশ
+                    </span>
+                    <span className="text-[9px] font-black bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md">
+                      লাইভ মজুদ
+                    </span>
+                  </div>
 
-              {/* 2. Rod Closing */}
-              <div className="bg-gradient-to-br from-orange-50/60 via-white to-amber-50/40 border border-orange-200/80 rounded-2xl p-3 space-y-2">
-                <div className="flex items-center justify-between border-b border-orange-200/60 pb-1.5">
-                  <span className="font-black text-orange-950 text-xs flex items-center gap-1.5">
-                    <Scale className="w-3.5 h-3.5 text-orange-600" />
-                    রড ও রিং ক্লোজিং
-                  </span>
-                  <span className="text-[9px] font-black bg-orange-100 text-orange-800 px-2 py-0.5 rounded-md">
-                    কেজি হিসাব
-                  </span>
-                </div>
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    <div className="bg-white border border-indigo-100 rounded-xl p-2 shadow-2xs">
+                      <p className="text-[9.5px] font-bold text-slate-500 leading-none">মোট পণ্যের পদ/প্রকার</p>
+                      <p className="text-sm sm:text-base font-black text-indigo-700 mt-1">
+                        {toBengaliDigits(products.length)} টি
+                      </p>
+                    </div>
+                    <div className="bg-white border border-emerald-100 rounded-xl p-2 shadow-2xs">
+                      <p className="text-[9.5px] font-bold text-slate-500 leading-none">মোট মজুদ পরিমাণ</p>
+                      <p className="text-sm sm:text-base font-black text-emerald-700 mt-1">
+                        {toBengaliDigits(Math.round(totalStockUnits).toLocaleString('en-IN'))} একক
+                      </p>
+                    </div>
+                  </div>
 
-                <div className="grid grid-cols-4 gap-1.5 text-center">
-                  <div className="bg-white border border-orange-100 rounded-xl p-1.5 shadow-2xs">
-                    <p className="text-[8.5px] font-bold text-slate-500 leading-none">বিক্রয়</p>
-                    <p className="text-xs sm:text-sm font-black text-orange-700 mt-1">
-                      {dailyReportData.formatRodVal(dailyReportData.rodSoldKg)}
-                    </p>
-                  </div>
-                  <div className="bg-white border border-emerald-100 rounded-xl p-1.5 shadow-2xs">
-                    <p className="text-[8.5px] font-bold text-slate-500 leading-none">প্রাপ্তি</p>
-                    <p className="text-xs sm:text-sm font-black text-emerald-700 mt-1">
-                      {dailyReportData.formatRodVal(dailyReportData.rodBoughtKg, true)}
-                    </p>
-                  </div>
-                  <div className="bg-white border border-amber-100 rounded-xl p-1.5 shadow-2xs">
-                    <p className="text-[8.5px] font-bold text-slate-500 leading-none">সরাসরি</p>
-                    <p className="text-xs sm:text-sm font-black text-amber-700 mt-1">
-                      {dailyReportData.formatRodVal(dailyReportData.rodDirectKg, true)}
-                    </p>
-                  </div>
-                  <div className="bg-amber-50/80 border border-amber-300 rounded-xl p-1.5 shadow-2xs">
-                    <p className="text-[8.5px] font-bold text-amber-900 leading-none">স্টক</p>
-                    <p className="text-xs sm:text-sm font-black text-amber-800 mt-1">
-                      {dailyReportData.formatRodVal(dailyReportData.totalRodStockKg, true)}
-                    </p>
-                  </div>
+                  {products.length > 0 && (
+                    <div className="bg-white/80 border border-indigo-100 rounded-xl p-2 space-y-1 shadow-2xs">
+                      <p className="text-[8.5px] font-bold text-slate-500">শীর্ষ স্টক পণ্য:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {products.slice(0, 5).map((p, idx) => (
+                          <span key={idx} className="inline-flex items-center gap-1 text-[9px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-200/80 px-1.5 py-0.5 rounded-md">
+                            <span>{p.name}:</span>
+                            <span className="font-black text-indigo-700">{toBengaliDigits(p.stock || 0)} {p.unit || 'একক'}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                <div className="bg-white/80 border border-orange-100 rounded-xl p-2 flex items-center justify-between text-xs shadow-2xs">
-                  <span className="text-[9.5px] font-bold text-slate-600">মোট রড ও রিং মজুদ:</span>
-                  <span className="font-black text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-md text-[10px]">
-                    {dailyReportData.formatRodVal(dailyReportData.totalRodStockKg, true)}
-                  </span>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

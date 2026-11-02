@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import { CustomerSearchSelect } from '@/components/CustomerSearchSelect';
 import { EngineerSearchSelect, EngineerOption } from '@/components/EngineerSearchSelect';
 import { toBengaliDigits, toEnglishDigits, parseProductDetails, formatProductName } from '@/lib/bengaliUtils';
-import { ProductSearchSelect } from '@/components/ProductSearchSelect';
+import { ProductSearchSelect, ProductOption } from '@/components/ProductSearchSelect';
 import { CascadingProductSelector, SelectedProductDetails } from '@/components/CascadingProductSelector';
 import { CartItemQtyInput } from '@/components/CartItemQtyInput';
 import { InvoiceMemo } from '@/components/InvoiceMemo';
@@ -42,6 +42,8 @@ interface Product {
   stock: number; 
   unit: string; 
   category: string; 
+  brand?: string;
+  code?: string;
 }
 
 interface Customer { 
@@ -238,9 +240,11 @@ function InvoicesContent() {
   // Cart & Item Selector States
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [selectedInvoiceProduct, setSelectedInvoiceProduct] = useState<ProductOption | null>(null);
   const [selectedCascadingProduct, setSelectedCascadingProduct] = useState<SelectedProductDetails | null>(null);
   const [itemQty, setItemQty] = useState<number>(1);
   const [itemPrice, setItemPrice] = useState<number>(0);
+  const [itemUnit, setItemUnit] = useState<string>('পিস');
   const [itemDiscount, setItemDiscount] = useState<number>(0);
 
   // Billing & Payment States
@@ -587,11 +591,13 @@ function InvoicesContent() {
       const prodList = await api.inventory.list();
       setProducts(prodList.map(p => ({
         id: String(p.id),
-        name: formatProductName(p.name, p.category_name),
+        name: p.name,
         sellPrice: Number(p.sell_price || 0),
         stock: Number(p.stock || 0),
         unit: p.unit || 'পিস',
-        category: p.category_name || 'অন্যান্য'
+        category: p.category_name || 'সাধারণ',
+        brand: p.brand || '',
+        code: p.sku || ''
       })));
 
       const partyList = await api.parties.list({ party_type: 'customer' });
@@ -864,35 +870,31 @@ function InvoicesContent() {
 
   // Cart Add Item
   const handleAddCartItem = () => {
-    const itemName = selectedCascadingProduct?.name || products.find(p => p.id === selectedProductId)?.name;
+    const itemName = selectedInvoiceProduct?.name || selectedCascadingProduct?.name || products.find(p => p.id === selectedProductId)?.name;
     if (!itemName) {
       toast.error('পণ্য নির্বাচন করুন');
       return;
     }
 
-    const foundProd = products.find(p => p.id === (selectedCascadingProduct?.productId || selectedProductId) || p.name === itemName);
-    const availableStock = Number(foundProd?.stock ?? selectedCascadingProduct?.stock ?? 0);
-
-    if (availableStock <= 0) {
-      toast.error('⚠️ পণ্যটি স্টকে নেই! বিক্রয় চালানে কেবল স্টকে থাকা পণ্য যোগ করা যাবে।');
-      return;
-    }
-
+    const targetProdId = selectedInvoiceProduct?.id || selectedCascadingProduct?.productId || selectedProductId;
+    const foundProd = selectedInvoiceProduct || products.find(p => p.id === targetProdId || p.name === itemName);
+    const availableStock = Number(selectedInvoiceProduct?.stock ?? foundProd?.stock ?? selectedCascadingProduct?.stock ?? 0);
     const requestedQty = parseFloat(String(itemQty)) || 1;
     const existing = cart.find(i => i.name === itemName || (foundProd && String(i.id) === String(foundProd.id)));
     const currentInCart = existing ? Number(existing.quantity) : 0;
 
-    const parsedItem = parseProductDetails({ name: itemName, category: selectedCascadingProduct?.category || (foundProd as any)?.category });
+    const parsedItem = parseProductDetails({ name: itemName, category: selectedInvoiceProduct?.category || selectedCascadingProduct?.category || (foundProd as any)?.category });
     const isRing = parsedItem.categoryName === 'রিং' || itemName.includes('রিং');
-    const itemUnitToUse = isRing ? 'কেজি' : (selectedCascadingProduct?.unit || foundProd?.unit || 'পিস');
+    const itemUnitToUse = selectedInvoiceProduct?.unit || (isRing ? 'কেজি' : (selectedCascadingProduct?.unit || (foundProd as any)?.unit || itemUnit || 'পিস'));
 
-    if (currentInCart + requestedQty > availableStock) {
-      toast.error(`⚠️ স্টকে মাত্র ${availableStock} ${itemUnitToUse} রয়েছে! (কার্টে ইতিমধ্যে আছে: ${currentInCart} ${itemUnitToUse}), এর বেশি যোগ করা সম্ভব নয়।`);
-      return;
+    if (availableStock <= 0) {
+      toast.warning(`⚠️ সতর্কতা: '${itemName}' পণ্যটির বর্তমান স্টক ০! চালানে যুক্ত করা হয়েছে।`);
+    } else if (currentInCart + requestedQty > availableStock) {
+      toast.warning(`⚠️ স্টকে মাত্র ${availableStock} ${itemUnitToUse} রয়েছে (কার্টে মোট: ${currentInCart + requestedQty})। চালানে যুক্ত করা হয়েছে।`);
     }
 
-    const itemId = selectedCascadingProduct?.productId || selectedProductId || foundProd?.id || String(Date.now());
-    const finalPrice = itemPrice || selectedCascadingProduct?.price || foundProd?.sellPrice || 0;
+    const itemId = selectedInvoiceProduct?.id || selectedCascadingProduct?.productId || selectedProductId || (foundProd as any)?.id || String(Date.now());
+    const finalPrice = itemPrice || selectedInvoiceProduct?.sellPrice || selectedCascadingProduct?.price || (foundProd as any)?.sellPrice || 0;
 
     setCart(prev => {
       const existingItem = prev.find(i => i.name === itemName || String(i.id) === String(itemId));
@@ -909,8 +911,8 @@ function InvoicesContent() {
       return [...prev, {
         id: itemId,
         name: itemName,
-        category: selectedCascadingProduct?.category || (foundProd as any)?.category,
-        brand: selectedCascadingProduct?.brand || (foundProd as any)?.brand,
+        category: selectedInvoiceProduct?.category || selectedCascadingProduct?.category || (foundProd as any)?.category,
+        brand: (selectedInvoiceProduct as any)?.brand || selectedCascadingProduct?.brand || (foundProd as any)?.brand,
         mmSize: selectedCascadingProduct?.mmSize,
         unit: itemUnitToUse,
         price: finalPrice,
@@ -920,9 +922,12 @@ function InvoicesContent() {
       }];
     });
 
+    setSelectedInvoiceProduct(null);
+    setSelectedCascadingProduct(null);
     setSelectedProductId('');
     setItemQty(1);
     setItemPrice(0);
+    setItemUnit('পিস');
     setItemDiscount(0);
   };
 
@@ -1134,8 +1139,11 @@ function InvoicesContent() {
     setNewCustomerData({ name: '', phone: '', address: '' });
     setCart([]);
     setSelectedProductId('');
+    setSelectedInvoiceProduct(null);
+    setSelectedCascadingProduct(null);
     setItemQty(1);
     setItemPrice(0);
+    setItemUnit('পিস');
     setItemDiscount(0);
     setInvoicePaidAmountInput('');
     setCashPaidAmountInput('');
@@ -2788,35 +2796,119 @@ function InvoicesContent() {
                     <div className="flex items-center justify-between">
                       <Label className="text-xs uppercase tracking-wider font-black text-slate-700 flex items-center gap-1.5">
                         <span className="w-5 h-5 rounded-sm bg-emerald-100 text-emerald-700 text-[11px] font-black flex items-center justify-center">২</span>
-                        পণ্যসমূহ (আইটেম লাইন)
+                        পণ্যসমূহ ও আইটেম লাইন (কার্ট)
                       </Label>
-                      <Button 
-                        type="button"
-                        onClick={handleAddCartItem}
-                        size="sm" 
-                        className="h-8 px-3 rounded-md bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs"
-                      >
-                        <Plus className="w-3.5 h-3.5 mr-1" /> নতুন সারি যোগ
-                      </Button>
+                      {cart.length > 0 && (
+                        <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
+                          মোট আইটেম: {toBengaliDigits(cart.length)} টি
+                        </span>
+                      )}
                     </div>
 
-                    {/* Step-by-Step Cascading Product Selector (Rod, Cement, Ring) */}
-                    <CascadingProductSelector
-                      products={products}
-                      onlyInStock={true}
-                      onProductChange={(selected) => {
-                        setSelectedCascadingProduct(selected);
-                        if (selected && selected.productId) {
-                          setSelectedProductId(selected.productId);
-                        }
-                      }}
-                      showPriceField={true}
-                      itemQty={itemQty}
-                      onQtyChange={setItemQty}
-                      itemPrice={itemPrice}
-                      onPriceChange={setItemPrice}
-                      onAddCartItem={handleAddCartItem}
-                    />
+                    {/* Unified Single-Field Product Selector (Search + Dropdown combined) */}
+                    <div className="bg-slate-50/90 border border-slate-200/90 rounded-lg p-3 sm:p-4 space-y-3 font-bengali shadow-xs">
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        {/* 1. Single Input Field (Dropdown + Search) like Customer/Engineer */}
+                        <div className="md:col-span-5 space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                            <span>পণ্য নির্বাচন করুন <span className="text-rose-500">*</span></span>
+                            {selectedInvoiceProduct && (
+                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                মজুদ স্টক: {toBengaliDigits(selectedInvoiceProduct.stock ?? 0)} {selectedInvoiceProduct.unit || 'পিস'}
+                              </span>
+                            )}
+                          </Label>
+                          <ProductSearchSelect
+                            products={products as any}
+                            selectedProduct={selectedInvoiceProduct}
+                            onSelectProduct={(prod) => {
+                              setSelectedInvoiceProduct(prod);
+                              if (prod) {
+                                setSelectedProductId(prod.id);
+                                setItemPrice(prod.sellPrice || 0);
+                                setItemUnit(prod.unit || 'পিস');
+                              } else {
+                                setSelectedProductId('');
+                                setItemPrice(0);
+                                setItemUnit('পিস');
+                              }
+                            }}
+                            placeholder="পণ্য সার্চ করুন বা ড্রপডাউনে ক্লিক করুন..."
+                            onlyInStock={true}
+                          />
+                        </div>
+
+                        {/* 2. Quantity Input */}
+                        <div className="md:col-span-2 space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                            <span>পরিমাণ <span className="text-rose-500">*</span></span>
+                            <span className="text-[10px] text-slate-500 font-bold">({selectedInvoiceProduct?.unit || itemUnit || 'পিস'})</span>
+                          </Label>
+                          <Input
+                            type="number"
+                            min="0.01"
+                            step="any"
+                            value={itemQty || ''}
+                            onChange={(e) => setItemQty(parseFloat(e.target.value) || 0)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddCartItem();
+                              }
+                            }}
+                            placeholder="১"
+                            className="h-10 bg-white border-slate-300 font-bold text-center text-sm"
+                          />
+                        </div>
+
+                        {/* 3. Sell Rate Input */}
+                        <div className="md:col-span-2 space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-700">বিক্রয় দর (৳)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={itemPrice || ''}
+                            onChange={(e) => setItemPrice(parseFloat(e.target.value) || 0)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddCartItem();
+                              }
+                            }}
+                            placeholder="০.০০"
+                            className="h-10 bg-white border-slate-300 font-bold text-center text-sm"
+                          />
+                        </div>
+
+                        {/* 4. Subtotal Preview */}
+                        <div className="md:col-span-1 space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-500">মোট (৳)</Label>
+                          <div className="h-10 bg-slate-100 border border-slate-200 rounded-md flex items-center justify-center font-black text-slate-800 text-xs px-1 overflow-hidden">
+                            ৳{toBengaliDigits(Math.round((itemQty * itemPrice) * 100) / 100 || 0)}
+                          </div>
+                        </div>
+
+                        {/* 5. Add to Cart Button */}
+                        <div className="md:col-span-2">
+                          <Button
+                            type="button"
+                            onClick={handleAddCartItem}
+                            disabled={!selectedInvoiceProduct && !selectedProductId}
+                            className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-md shadow-xs flex items-center justify-center gap-1.5 transition-all disabled:opacity-40"
+                          >
+                            <Plus className="w-4 h-4" /> কার্টে যোগ করুন
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Over-stock Warning Indicator */}
+                      {selectedInvoiceProduct && itemQty > (selectedInvoiceProduct.stock ?? 0) && (
+                        <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 p-2 rounded-md flex items-center gap-1.5 animate-pulse">
+                          <span>⚠️ সতর্কবার্তা: স্টকে মাত্র {toBengaliDigits(selectedInvoiceProduct.stock ?? 0)} {selectedInvoiceProduct.unit || 'পিস'} রয়েছে। আপনি কার্টে {toBengaliDigits(itemQty)} দিয়েছেন!</span>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Table matching screenshot columns */}
                     <div className="border border-slate-200 rounded-md overflow-x-auto">
@@ -2826,7 +2918,7 @@ function InvoicesContent() {
                             <TableHead className="w-10 text-center font-black">#</TableHead>
                             <TableHead className="font-black">পণ্যের নাম</TableHead>
                             <TableHead className="text-center font-black">ব্র্যান্ড</TableHead>
-                            <TableHead className="text-center font-black">সাইজ</TableHead>
+                            <TableHead className="text-center font-black">ক্যাটাগরি / সাইজ</TableHead>
                             <TableHead className="text-center font-black">পরিমাণ</TableHead>
                             <TableHead className="text-right font-black">একক মূল্য</TableHead>
                             <TableHead className="text-right font-black">মোট মূল্য</TableHead>
@@ -2845,9 +2937,9 @@ function InvoicesContent() {
                             return (
                               <TableRow key={item.id ? `${item.id}-${idx}` : `${item.name}-${idx}`} className="text-xs border-b border-slate-100">
                                 <TableCell className="text-center font-bold text-slate-400">{toBengaliDigits(idx + 1)}</TableCell>
-                                <TableCell className="font-bold text-slate-900">{parsed.categoryName}</TableCell>
-                                <TableCell className="text-center font-bold text-slate-700">{parsed.brandName}</TableCell>
-                                <TableCell className="text-center font-bold text-slate-700">{parsed.sizeName}</TableCell>
+                                <TableCell className="font-bold text-slate-900">{item.name || parsed.categoryName}</TableCell>
+                                <TableCell className="text-center font-bold text-slate-700">{parsed.brandName || '—'}</TableCell>
+                                <TableCell className="text-center font-bold text-slate-700">{item.category || parsed.sizeName || '—'}</TableCell>
                                 <TableCell className="text-center">
                                   <CartItemQtyInput
                                     value={item.quantity}

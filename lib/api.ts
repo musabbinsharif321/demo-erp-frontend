@@ -71,6 +71,7 @@ export interface ProductData {
   category?: number | null;
   category_name?: string;
   stock?: number;
+  opening_stock?: number;
   min_stock?: number;
   unit?: string;
   purchase_price: number;

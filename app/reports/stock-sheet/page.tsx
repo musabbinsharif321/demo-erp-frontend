@@ -179,7 +179,7 @@ export default function StockSheetReportPage() {
                 স্টক শিট রিপোর্ট
               </h2>
               <p className="text-slate-500 font-bengali text-xs">
-                রড, সিমেন্ট ও অন্যান্য পণ্যের মজুদের প্রিন্ট-উপযোগী দৈনিক স্টেটমেন্ট
+                দোকানের সকল পণ্যের মজুদের প্রিন্ট-উপযোগী দৈনিক স্টেটমেন্ট
               </p>
             </div>
           </div>

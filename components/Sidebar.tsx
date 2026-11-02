@@ -82,7 +82,7 @@ const menuStructure: MenuItem[] = [
       { name: 'ডেইলি রিপোর্ট', href: '/reports?tab=daily_sales', icon: FileText },
       { name: 'ইনকাম বিবরণী (Profit/Loss)', href: '/reports?tab=profit_loss', icon: TrendingUp },
       { name: 'ব্যালেন্স স্টেটমেন্ট', href: '/reports?tab=balance_sheet', icon: Scale },
-      { name: 'রড সিমেন্ট ক্রয় বিক্রয় স্টেটমেন্ট', href: '/reports?tab=trade_register', icon: Truck },
+      { name: 'ক্রয়-বিক্রয় রেজিস্টার (Sales & Purchase)', href: '/reports?tab=trade_register', icon: Truck },
       { name: 'পেন্ডিং কমিশন তালিকা', href: '/reports?tab=commissions', icon: Percent },
     ]
   },
@@ -207,14 +207,14 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img 
                   src="/logo.png" 
-                  alt="মেসার্স দেলোয়ার এন্ড ব্রাদার্স" 
+                  alt="স্মার্ট বিজনেস ইআরপি" 
                   className="w-full h-full object-contain rounded-lg"
                 />
               </div>
               {(isExpanded || mobileOpen) && (
                 <div className="overflow-hidden whitespace-nowrap transition-all duration-200">
-                  <h1 className="text-sm font-black text-white leading-tight drop-shadow-xs">মেসার্স দেলোয়ার এন্ড ব্রাদার্স</h1>
-                  <p className="text-[10px] text-amber-100 font-semibold drop-shadow-2xs">রড ও সিমেন্ট ব্যবসা</p>
+                  <h1 className="text-sm font-black text-white leading-tight drop-shadow-xs">স্মার্ট বিজনেস ইআরপি</h1>
+                  <p className="text-[10px] text-amber-100 font-semibold drop-shadow-2xs">অল-ইন-ওয়ান শপ ম্যানেজমেন্ট</p>
                 </div>
               )}
             </div>

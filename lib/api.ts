@@ -126,6 +126,7 @@ export interface TransactionItemData {
   product_name: string;
   quantity: number;
   price: number;
+  buy_price?: number;
   unit?: string;
   total: number;
 }
@@ -149,6 +150,8 @@ export interface TransactionData {
   total_amount: number;
   paid_amount: number;
   due_amount: number;
+  profit?: number;
+  cost_amount?: number;
   payment_method?: string;
   bank_account?: number | null;
   cheque_number?: string;

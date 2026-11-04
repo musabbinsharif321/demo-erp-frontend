@@ -177,8 +177,13 @@ export function ProductSearchSelect({
               <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-1.5 py-0.5 rounded">
                 স্টক: {toBengaliDigits(selectedProduct.stock || 0)} {selectedProduct.unit || 'পিস'}
               </span>
+              {selectedProduct.buyPrice !== undefined && selectedProduct.buyPrice > 0 && (
+                <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-1.5 py-0.5 rounded border border-amber-300">
+                  ক্রয়: ৳{toBengaliDigits(selectedProduct.buyPrice)}
+                </span>
+              )}
               <span className="text-orange-600 font-black">
-                ৳{toBengaliDigits(selectedProduct.sellPrice || 0)}
+                বিক্রয়: ৳{toBengaliDigits(selectedProduct.sellPrice || 0)}
               </span>
             </div>
             <button
@@ -291,8 +296,13 @@ export function ProductSearchSelect({
                           )}
                         </div>
                         <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                          {prod.buyPrice !== undefined && prod.buyPrice > 0 && (
+                            <span className="font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">
+                              ক্রয়: ৳{toBengaliDigits(prod.buyPrice)}
+                            </span>
+                          )}
                           <span className="text-slate-700 font-bold">
-                            দর: ৳{toBengaliDigits(prod.sellPrice || 0)}/{prod.unit || 'পিস'}
+                            বিক্রয়: ৳{toBengaliDigits(prod.sellPrice || 0)}/{prod.unit || 'পিস'}
                           </span>
                           <span>•</span>
                           {(prod.stock || 0) > 0 ? (

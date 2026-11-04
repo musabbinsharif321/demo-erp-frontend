@@ -36,6 +36,7 @@ interface Product {
   id: string; 
   name: string; 
   sellPrice: number; 
+  buyPrice?: number;
   stock: number; 
   unit: string; 
   category: string; 
@@ -283,6 +284,7 @@ export default function OrdersPage() {
         id: String(p.id),
         name: p.name,
         sellPrice: Number(p.sell_price || 0),
+        buyPrice: Number(p.purchase_price || 0),
         stock: Number(p.stock || 0),
         unit: p.unit || 'পিস',
         category: p.category_name || 'সাধারণ',
@@ -1417,9 +1419,16 @@ export default function OrdersPage() {
                           <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
                             <span>পণ্য নির্বাচন করুন <span className="text-rose-500">*</span></span>
                             {selectedOrderProduct && (
-                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                                মজুদ স্টক: {toBengaliDigits(selectedOrderProduct.stock ?? 0)} {selectedOrderProduct.unit || 'পিস'}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                {selectedOrderProduct.buyPrice !== undefined && selectedOrderProduct.buyPrice > 0 && (
+                                  <span className="text-[11px] font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-300">
+                                    ক্রয়মূল্য: ৳{toBengaliDigits(selectedOrderProduct.buyPrice.toLocaleString('en-IN'))}
+                                  </span>
+                                )}
+                                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                  মজুদ স্টক: {toBengaliDigits(selectedOrderProduct.stock ?? 0)} {selectedOrderProduct.unit || 'পিস'}
+                                </span>
+                              </div>
                             )}
                           </Label>
                           <ProductSearchSelect
@@ -1467,7 +1476,14 @@ export default function OrdersPage() {
 
                         {/* 3. Sell Rate Input */}
                         <div className="md:col-span-2 space-y-1.5">
-                          <Label className="text-xs font-bold text-slate-700">দর (৳)</Label>
+                          <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                            <span>দর (৳)</span>
+                            {selectedOrderProduct?.buyPrice !== undefined && selectedOrderProduct.buyPrice > 0 && (
+                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-mono" title="এই পণ্যের ক্রয়মূল্য">
+                                ক্রয়: ৳{toBengaliDigits(selectedOrderProduct.buyPrice.toLocaleString('en-IN'))}
+                              </span>
+                            )}
+                          </Label>
                           <Input
                             type="number"
                             min="0"
@@ -1488,8 +1504,16 @@ export default function OrdersPage() {
                         {/* 4. Subtotal Preview */}
                         <div className="md:col-span-1 space-y-1.5">
                           <Label className="text-xs font-bold text-slate-500">মোট (৳)</Label>
-                          <div className="h-10 bg-slate-100 border border-slate-200 rounded-md flex items-center justify-center font-black text-slate-800 text-xs px-1 overflow-hidden">
-                            ৳{toBengaliDigits(Math.round((itemQty * itemPrice) * 100) / 100 || 0)}
+                          <div className="h-10 bg-slate-100 border border-slate-200 rounded-md flex flex-col items-center justify-center font-black text-slate-800 text-xs px-1 overflow-hidden leading-tight">
+                            <span>৳{toBengaliDigits(Math.round((itemQty * itemPrice) * 100) / 100 || 0)}</span>
+                            {selectedOrderProduct?.buyPrice !== undefined && selectedOrderProduct.buyPrice > 0 && itemPrice > 0 && (
+                              <span className={cn(
+                                "text-[10px] font-mono font-bold",
+                                (itemPrice - selectedOrderProduct.buyPrice) >= 0 ? "text-emerald-600" : "text-rose-600"
+                              )}>
+                                {(itemPrice - selectedOrderProduct.buyPrice) >= 0 ? '+' : ''}৳{toBengaliDigits(Math.round(((itemPrice - selectedOrderProduct.buyPrice) * itemQty) * 100) / 100)}
+                              </span>
+                            )}
                           </div>
                         </div>
 

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { 
-  LayoutDashboard, Package, ShoppingCart, Users, Settings, LogOut,
+  LayoutDashboard, Package, ShoppingCart, Users, Settings, LogOut, ShoppingBag,
   TrendingUp, ChevronDown, ChevronRight, Truck, BarChart3,
   AlertTriangle, FileText, Receipt, RotateCcw, Building2,
   DollarSign, PieChart, Landmark, ArrowUpCircle, ArrowDownCircle, PlusCircle, BookOpen, ArrowRightLeft, Scale, PanelLeftClose, PanelLeftOpen, Wallet, Percent, HardHat, Download
@@ -74,16 +74,13 @@ const menuStructure: MenuItem[] = [
     icon: BarChart3,
     href: '/reports',
     children: [
-      { name: 'সব রিপোর্ট', href: '/reports?tab=hub', icon: BarChart3 },
-      { name: 'স্টক শিট রিপোর্ট', href: '/reports/stock-sheet', icon: Package },
-      { name: 'বাকি কাস্টমার তালিকা', href: '/customers/dues', icon: Receipt },
-      { name: 'ব্যাংক এর তালিকা', href: '/reports?tab=bank_list', icon: Landmark },
-      { name: 'ডেইলী টপসিট', href: '/reports?tab=daily_topsheet', icon: FileText },
-      { name: 'ডেইলি রিপোর্ট', href: '/reports?tab=daily_sales', icon: FileText },
-      { name: 'ইনকাম বিবরণী (Profit/Loss)', href: '/reports?tab=profit_loss', icon: TrendingUp },
-      { name: 'ব্যালেন্স স্টেটমেন্ট', href: '/reports?tab=balance_sheet', icon: Scale },
-      { name: 'ক্রয়-বিক্রয় রেজিস্টার (Sales & Purchase)', href: '/reports?tab=trade_register', icon: Truck },
-      { name: 'পেন্ডিং কমিশন তালিকা', href: '/reports?tab=commissions', icon: Percent },
+      { name: 'সকল রিপোর্ট হাব', href: '/reports?tab=hub', icon: BarChart3 },
+      { name: 'বিক্রয় ও লাভ রিপোর্ট', href: '/reports?tab=sales', icon: ShoppingBag },
+      { name: 'ক্রয় ও পরিচালন ব্যয়', href: '/reports?tab=purchases', icon: ShoppingCart },
+      { name: 'আয় বিবরণী (Profit & Loss)', href: '/reports?tab=profit_loss', icon: TrendingUp },
+      { name: 'স্টক ও ইনভেন্টরি মূল্যায়ন', href: '/reports?tab=stock', icon: Package },
+      { name: 'বাকি ও দেনা-পাওনা তালিকা', href: '/reports?tab=dues', icon: Users },
+      { name: 'দৈনিক ক্যাশ ও ব্যাংক ক্লোজিং', href: '/reports?tab=daily_closing', icon: Landmark },
     ]
   },
   {

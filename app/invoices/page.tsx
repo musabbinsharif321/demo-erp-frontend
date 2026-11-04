@@ -8,7 +8,7 @@ import {
   Search, Eye, Printer, X, FileText, Receipt, Banknote, AlertCircle, Plus, 
   ShoppingCart, User, Phone, Tag, CheckCircle2, DollarSign, Trash2, ArrowRight, ArrowLeft,
   Lightbulb, Calendar, Building, UserCheck, Percent, HelpCircle, Edit2, Filter, ChevronUp, ChevronDown, RotateCcw, Zap, ArrowUpDown, ChevronLeft, ChevronRight,
-  MapPin
+  MapPin, TrendingUp, TrendingDown
 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -39,6 +39,7 @@ interface Product {
   id: string; 
   name: string; 
   sellPrice: number; 
+  buyPrice?: number;
   stock: number; 
   unit: string; 
   category: string; 
@@ -69,6 +70,7 @@ interface OrderItem {
   brand?: string;
   mmSize?: string;
   price: number;
+  buyPrice?: number;
   quantity: number;
   unit: string;
   total: number;
@@ -101,6 +103,8 @@ interface Invoice {
   totalAmount: number;
   paidAmount: number;
   dueAmount: number;
+  profit?: number;
+  costAmount?: number;
   paymentStatus: string;
   stage?: 'draft' | 'pending' | 'approved' | 'rejected';
   status?: string;
@@ -518,6 +522,7 @@ function InvoicesContent() {
             id: String(i.product || ''),
             name: formatProductName(i.product_name),
             price: i.price,
+            buyPrice: Number(i.buy_price || 0),
             quantity: i.quantity,
             unit: i.unit || 'পিস',
             total: i.total
@@ -530,6 +535,8 @@ function InvoicesContent() {
           totalAmount: Number(s.total_amount || 0),
           paidAmount: Number(s.paid_amount || 0),
           dueAmount: Number(s.due_amount || 0),
+          profit: Number(s.profit || 0),
+          costAmount: Number(s.cost_amount || 0),
           paymentStatus: s.due_amount <= 0 ? 'পরিশোধিত' : (s.paid_amount || 0) > 0 ? 'আংশিক' : 'বাকি',
           stage: s.status === 'pending' || s.status === 'draft' ? 'pending' : 'approved',
           status: s.status || 'pending',
@@ -593,6 +600,7 @@ function InvoicesContent() {
         id: String(p.id),
         name: p.name,
         sellPrice: Number(p.sell_price || 0),
+        buyPrice: Number(p.purchase_price || 0),
         stock: Number(p.stock || 0),
         unit: p.unit || 'পিস',
         category: p.category_name || 'সাধারণ',
@@ -743,6 +751,7 @@ function InvoicesContent() {
           id: String(i.product || i.id || ''),
           name: formatProductName(i.product_name),
           price: Number(i.price || 0),
+          buyPrice: Number(i.buy_price || 0),
           quantity: Number(i.quantity || 1),
           unit: i.unit || 'পিস',
           total: Number(i.total || (Number(i.price || 0) * Number(i.quantity || 1)))
@@ -895,6 +904,7 @@ function InvoicesContent() {
 
     const itemId = selectedInvoiceProduct?.id || selectedCascadingProduct?.productId || selectedProductId || (foundProd as any)?.id || String(Date.now());
     const finalPrice = itemPrice || selectedInvoiceProduct?.sellPrice || selectedCascadingProduct?.price || (foundProd as any)?.sellPrice || 0;
+    const finalBuyPrice = selectedInvoiceProduct?.buyPrice ?? (foundProd as any)?.buyPrice ?? 0;
 
     setCart(prev => {
       const existingItem = prev.find(i => i.name === itemName || String(i.id) === String(itemId));
@@ -904,6 +914,7 @@ function InvoicesContent() {
           ...i, 
           quantity: updatedQty, 
           price: finalPrice, 
+          buyPrice: i.buyPrice !== undefined && i.buyPrice > 0 ? i.buyPrice : finalBuyPrice,
           discount: itemDiscount,
           total: Math.round(finalPrice * updatedQty * 100) / 100
         } : i);
@@ -916,6 +927,7 @@ function InvoicesContent() {
         mmSize: selectedCascadingProduct?.mmSize,
         unit: itemUnitToUse,
         price: finalPrice,
+        buyPrice: finalBuyPrice,
         quantity: requestedQty,
         discount: itemDiscount || 0,
         total: Math.round(finalPrice * requestedQty * 100) / 100
@@ -1108,6 +1120,19 @@ function InvoicesContent() {
   const cartTotalDiscount = round2(computedDiscount + cart.reduce((a, i) => a + ((i.discount || 0) * i.quantity), 0));
   const effectiveShippingCost = shippingCostToCustomerLedger ? (shippingCost || 0) : 0;
   const cartTotalAmount = round2(Math.max(0, cartSubtotal - cartTotalDiscount + effectiveShippingCost + (laborCost || 0)));
+
+  // Real-time Cart Profit Calculations
+  const cartCostTotal = round2(cart.reduce((sum, item) => {
+    let cost = item.buyPrice !== undefined && item.buyPrice > 0 ? item.buyPrice : 0;
+    if (!cost) {
+      const p = products.find(prod => String(prod.id) === String(item.id) || prod.name === item.name);
+      cost = Number(p?.buyPrice || 0);
+    }
+    return sum + (cost * (Number(item.quantity) || 0));
+  }, 0));
+  const cartNetRevenue = round2(Math.max(0, cartSubtotal - cartTotalDiscount));
+  const cartEstimatedProfit = round2(cartNetRevenue - cartCostTotal);
+  const cartProfitMargin = cartNetRevenue > 0 ? Math.round((cartEstimatedProfit / cartNetRevenue) * 1000) / 10 : 0;
 
   // Total Paid considering Split payment or single payment
   const isSplitPayment = invoicePaymentMethod === 'Split';
@@ -2180,6 +2205,12 @@ function InvoicesContent() {
                   </TableHead>
                   <TableHead className="font-bengali text-slate-600 text-xs font-bold py-4 px-4 text-right">
                     <div className="flex items-center justify-end gap-1 cursor-pointer select-none">
+                      <span>লাভ (৳)</span>
+                      <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="font-bengali text-slate-600 text-xs font-bold py-4 px-4 text-right">
+                    <div className="flex items-center justify-end gap-1 cursor-pointer select-none">
                       <span>নগদ প্রাপ্তি (৳)</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
@@ -2207,10 +2238,10 @@ function InvoicesContent() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={10} className="text-center py-20 text-slate-400 font-bengali font-bold text-lg">লোড হচ্ছে...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={11} className="text-center py-20 text-slate-400 font-bengali font-bold text-lg">লোড হচ্ছে...</TableCell></TableRow>
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-20">
+                    <TableCell colSpan={11} className="text-center py-20">
                       <div className="flex flex-col items-center justify-center text-slate-400">
                         <Receipt className="w-12 h-12 mb-3 opacity-20" />
                         <p className="font-bengali font-bold text-lg">কোনো ইনভয়েস/চালান পাওয়া যায়নি</p>
@@ -2259,6 +2290,18 @@ function InvoicesContent() {
                       </TableCell>
                       <TableCell className="text-right font-bengali font-bold text-slate-900 text-sm py-4 px-4">
                         ৳{toBengaliDigits((inv.totalAmount || 0).toLocaleString('en-IN'))}
+                      </TableCell>
+                      <TableCell className="text-right font-bengali font-bold text-sm py-4 px-4">
+                        {inv.profit !== undefined ? (
+                          <span className={cn(
+                            "font-mono font-black",
+                            inv.profit >= 0 ? "text-emerald-600" : "text-rose-600"
+                          )}>
+                            {inv.profit >= 0 ? '+' : ''}৳{toBengaliDigits(inv.profit.toLocaleString('en-IN'))}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right font-bengali font-bold text-emerald-600 text-sm py-4 px-4">
                         ৳{toBengaliDigits((inv.paidAmount || 0).toLocaleString('en-IN'))}
@@ -2813,9 +2856,16 @@ function InvoicesContent() {
                           <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
                             <span>পণ্য নির্বাচন করুন <span className="text-rose-500">*</span></span>
                             {selectedInvoiceProduct && (
-                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                                মজুদ স্টক: {toBengaliDigits(selectedInvoiceProduct.stock ?? 0)} {selectedInvoiceProduct.unit || 'পিস'}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                {selectedInvoiceProduct.buyPrice !== undefined && selectedInvoiceProduct.buyPrice > 0 && (
+                                  <span className="text-[11px] font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-300">
+                                    ক্রয়মূল্য: ৳{toBengaliDigits(selectedInvoiceProduct.buyPrice.toLocaleString('en-IN'))}
+                                  </span>
+                                )}
+                                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                  মজুদ স্টক: {toBengaliDigits(selectedInvoiceProduct.stock ?? 0)} {selectedInvoiceProduct.unit || 'পিস'}
+                                </span>
+                              </div>
                             )}
                           </Label>
                           <ProductSearchSelect
@@ -2863,7 +2913,14 @@ function InvoicesContent() {
 
                         {/* 3. Sell Rate Input */}
                         <div className="md:col-span-2 space-y-1.5">
-                          <Label className="text-xs font-bold text-slate-700">বিক্রয় দর (৳)</Label>
+                          <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                            <span>বিক্রয় দর (৳)</span>
+                            {selectedInvoiceProduct?.buyPrice !== undefined && selectedInvoiceProduct.buyPrice > 0 && (
+                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-mono" title="এই পণ্যের ক্রয়মূল্য">
+                                ক্রয়: ৳{toBengaliDigits(selectedInvoiceProduct.buyPrice.toLocaleString('en-IN'))}
+                              </span>
+                            )}
+                          </Label>
                           <Input
                             type="number"
                             min="0"
@@ -2884,8 +2941,16 @@ function InvoicesContent() {
                         {/* 4. Subtotal Preview */}
                         <div className="md:col-span-1 space-y-1.5">
                           <Label className="text-xs font-bold text-slate-500">মোট (৳)</Label>
-                          <div className="h-10 bg-slate-100 border border-slate-200 rounded-md flex items-center justify-center font-black text-slate-800 text-xs px-1 overflow-hidden">
-                            ৳{toBengaliDigits(Math.round((itemQty * itemPrice) * 100) / 100 || 0)}
+                          <div className="h-10 bg-slate-100 border border-slate-200 rounded-md flex flex-col items-center justify-center font-black text-slate-800 text-xs px-1 overflow-hidden leading-tight">
+                            <span>৳{toBengaliDigits(Math.round((itemQty * itemPrice) * 100) / 100 || 0)}</span>
+                            {selectedInvoiceProduct?.buyPrice !== undefined && selectedInvoiceProduct.buyPrice > 0 && itemPrice > 0 && (
+                              <span className={cn(
+                                "text-[10px] font-mono font-bold",
+                                (itemPrice - selectedInvoiceProduct.buyPrice) >= 0 ? "text-emerald-600" : "text-rose-600"
+                              )}>
+                                {(itemPrice - selectedInvoiceProduct.buyPrice) >= 0 ? '+' : ''}৳{toBengaliDigits(Math.round(((itemPrice - selectedInvoiceProduct.buyPrice) * itemQty) * 100) / 100)}
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -2922,13 +2987,14 @@ function InvoicesContent() {
                             <TableHead className="text-center font-black">পরিমাণ</TableHead>
                             <TableHead className="text-right font-black">একক মূল্য</TableHead>
                             <TableHead className="text-right font-black">মোট মূল্য</TableHead>
+                            <TableHead className="text-right font-black">লাভ (Profit)</TableHead>
                             <TableHead className="w-10 text-center font-black">🗑️</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {cart.length === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={8} className="text-center py-8 text-xs text-slate-400 font-semibold">
+                              <TableCell colSpan={9} className="text-center py-8 text-xs text-slate-400 font-semibold">
                                 কার্ট খালি। উপর থেকে পণ্য নির্বাচন করে যোগ করুন।
                               </TableCell>
                             </TableRow>
@@ -2949,6 +3015,33 @@ function InvoicesContent() {
                                 </TableCell>
                                 <TableCell className="text-right font-medium text-slate-600">৳{toBengaliDigits((item.price || 0).toLocaleString('en-IN'))}</TableCell>
                                 <TableCell className="text-right font-black text-slate-900">৳{toBengaliDigits(((item.price || 0) * item.quantity).toLocaleString('en-IN'))}</TableCell>
+                                {(() => {
+                                  const itemCost = item.buyPrice !== undefined && item.buyPrice > 0
+                                    ? item.buyPrice 
+                                    : (products.find(p => String(p.id) === String(item.id) || p.name === item.name)?.buyPrice || 0);
+                                  const itemRevenue = (item.price * item.quantity) - ((item.discount || 0) * item.quantity);
+                                  const itemTotalCost = itemCost * item.quantity;
+                                  const itemProfit = Math.round((itemRevenue - itemTotalCost) * 100) / 100;
+                                  return (
+                                    <TableCell className="text-right">
+                                      {itemCost > 0 ? (
+                                        <div>
+                                          <span className={cn(
+                                            "font-mono font-bold text-xs block",
+                                            itemProfit >= 0 ? "text-emerald-600" : "text-rose-600"
+                                          )}>
+                                            {itemProfit >= 0 ? '+' : ''}৳{toBengaliDigits(itemProfit.toLocaleString('en-IN'))}
+                                          </span>
+                                          <span className="text-[10px] text-slate-400 block font-bengali">
+                                            (ক্রয়: ৳{toBengaliDigits(itemCost)})
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-slate-400 text-xs">—</span>
+                                      )}
+                                    </TableCell>
+                                  );
+                                })()}
                                 <TableCell className="text-center">
                                   <button type="button" onClick={() => handleRemoveCartItem(item.id, idx)} className="p-1 text-rose-500 hover:bg-rose-50 rounded-sm cursor-pointer transition-colors" title="আইটেম বাদ দিন">
                                     <Trash2 className="w-4 h-4" />
@@ -3957,6 +4050,50 @@ function InvoicesContent() {
                           </span>
                         </div>
                         <span className="text-2xl font-black text-orange-600">৳ {toBengaliDigits(netPayableWithPrevious.toLocaleString('en-IN'))}</span>
+                      </div>
+
+                      {/* Real-time Estimated Profit Box */}
+                      <div className="pt-3 border-t border-dashed border-slate-200">
+                        <div className={cn(
+                          "p-3 rounded-lg border flex items-center justify-between transition-all",
+                          cartEstimatedProfit >= 0 
+                            ? "bg-gradient-to-r from-emerald-50 to-teal-50/60 border-emerald-200 text-emerald-950" 
+                            : "bg-rose-50 border-rose-200 text-rose-950"
+                        )}>
+                          <div className="flex items-center gap-2.5">
+                            <div className={cn(
+                              "w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-xs",
+                              cartEstimatedProfit >= 0 ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
+                            )}>
+                              {cartEstimatedProfit >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                            </div>
+                            <div>
+                              <div className="text-xs font-black flex items-center gap-1.5">
+                                <span>চালানের আনুমানিক নিট লাভ</span>
+                                <span className={cn(
+                                  "text-[10px] px-1.5 py-0.5 rounded-full font-bold",
+                                  cartEstimatedProfit >= 0 ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                                )}>
+                                  {toBengaliDigits(cartProfitMargin)}% মার্জিন
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 font-medium">
+                                নিট বিক্রয়: ৳{toBengaliDigits(cartNetRevenue.toLocaleString('en-IN'))} | মোট ক্রয়মূল্য: ৳{toBengaliDigits(cartCostTotal.toLocaleString('en-IN'))}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className={cn(
+                              "text-lg font-black block font-mono",
+                              cartEstimatedProfit >= 0 ? "text-emerald-700" : "text-rose-700"
+                            )}>
+                              {cartEstimatedProfit >= 0 ? '+' : ''}৳ {toBengaliDigits(cartEstimatedProfit.toLocaleString('en-IN'))}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-bold block">
+                              {cartCostTotal > 0 ? 'লাইভ হিসাবকৃত' : 'ক্রয়মূল্য অন্তর্ভুক্ত করুন'}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </CardContent>

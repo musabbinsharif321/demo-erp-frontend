@@ -6,13 +6,15 @@ import { bn } from 'date-fns/locale';
 import { 
   ArrowLeft, Printer, Download, Mail, Edit, 
   Receipt, User, Truck, ClipboardList, CreditCard, 
-  FileText, Settings, Building2, MapPin, CheckCircle2
+  FileText, Settings, Building2, MapPin, CheckCircle2,
+  TrendingUp, TrendingDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toBengaliDigits, parseProductDetails, cleanLegacyBengaliText } from '@/lib/bengaliUtils';
 import { printElement } from '@/lib/printUtils';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/authContext';
+import { api } from '@/lib/api';
 
 export interface SalesInvoiceDetailsViewProps {
   invoice: any;
@@ -34,6 +36,22 @@ export const SalesInvoiceDetailsView: React.FC<SalesInvoiceDetailsViewProps> = (
   onApprove
 }) => {
   const { canEditInvoice } = useAuth();
+  const [productCostMap, setProductCostMap] = React.useState<Map<string, number>>(new Map());
+
+  React.useEffect(() => {
+    api.inventory.list().then((prods: any[]) => {
+      const map = new Map<string, number>();
+      (prods || []).forEach((p: any) => {
+        const cost = Number(p.purchase_price || 0);
+        if (cost > 0) {
+          map.set(String(p.id), cost);
+          map.set(p.name.trim().toLowerCase(), cost);
+        }
+      });
+      setProductCostMap(map);
+    }).catch(() => {});
+  }, []);
+
   if (!invoice) return null;
 
   // Format Date & Time
@@ -65,6 +83,19 @@ export const SalesInvoiceDetailsView: React.FC<SalesInvoiceDetailsViewProps> = (
     }
   }
 
+  // Helper to extract cost price for an item
+  const getItemCost = (item: any) => {
+    if (item.buyPrice && Number(item.buyPrice) > 0) return Number(item.buyPrice);
+    if (item.buy_price && Number(item.buy_price) > 0) return Number(item.buy_price);
+    if (item.cost_price && Number(item.cost_price) > 0) return Number(item.cost_price);
+    if (item.purchase_price && Number(item.purchase_price) > 0) return Number(item.purchase_price);
+    if (item.productId && productCostMap.has(String(item.productId))) return productCostMap.get(String(item.productId))!;
+    if (item.id && productCostMap.has(String(item.id))) return productCostMap.get(String(item.id))!;
+    const cleanName = (item.name || '').trim().toLowerCase();
+    if (productCostMap.has(cleanName)) return productCostMap.get(cleanName)!;
+    return 0;
+  };
+
   // Items & Quantities
   const items = invoice.items || [];
   const subtotal = Number(invoice.subtotal || items.reduce((sum: number, i: any) => sum + (i.price * i.quantity), 0));
@@ -73,6 +104,28 @@ export const SalesInvoiceDetailsView: React.FC<SalesInvoiceDetailsViewProps> = (
   const discountPercent = Number(meta.discountPercent || 0);
   const discountFlat = Number(invoice.discount !== undefined ? invoice.discount : (meta.discountFlat || meta.discount || 0));
   const discount = discountFlat > 0 ? discountFlat : (discountPercent > 0 ? (subtotal * discountPercent / 100) : 0);
+
+  // Profit Calculation for this Invoice
+  const invoiceProfit = React.useMemo(() => {
+    let totalCost = 0;
+    (items || []).forEach((item: any) => {
+      const c = getItemCost(item);
+      totalCost += c * (Number(item.quantity) || 0);
+    });
+
+    const netProductRevenue = Math.max(0, subtotal - discount);
+    const profit = invoice.profit !== undefined && Number(invoice.profit) !== 0 
+      ? Number(invoice.profit) 
+      : (netProductRevenue - totalCost);
+    const margin = netProductRevenue > 0 ? (profit / netProductRevenue) * 100 : 0;
+
+    return {
+      totalCost: Math.round(totalCost * 100) / 100,
+      netProductRevenue: Math.round(netProductRevenue * 100) / 100,
+      profit: Math.round(profit * 100) / 100,
+      margin: Math.round(margin * 10) / 10
+    };
+  }, [items, subtotal, discount, invoice.profit, productCostMap]);
 
   // Freight & Labor Charges
   const shippingCost = Number(invoice.shippingCost || invoice.transportCost || meta.transportCost || meta.shippingCost || 0);
@@ -231,7 +284,16 @@ export const SalesInvoiceDetailsView: React.FC<SalesInvoiceDetailsViewProps> = (
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
               বিক্রয় চালান বিস্তারিত
             </h1>
-            <p className="text-xs font-mono text-slate-500 font-bold">চালান নং: #{invoiceNo}</p>
+            <div className="flex flex-wrap items-center gap-2 mt-0.5">
+              <p className="text-xs font-mono text-slate-500 font-bold">চালান নং: #{invoiceNo}</p>
+              <span className={cn(
+                "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black border shadow-2xs",
+                invoiceProfit.profit >= 0 ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "bg-rose-50 text-rose-800 border-rose-300"
+              )}>
+                <TrendingUp className="w-3.5 h-3.5" />
+                মোট লাভ: {invoiceProfit.profit >= 0 ? '+' : ''}৳ {toBengaliDigits(invoiceProfit.profit.toLocaleString('en-IN'))} ({toBengaliDigits(invoiceProfit.margin)}% মার্জিন)
+              </span>
+            </div>
           </div>
         </div>
 
@@ -510,26 +572,30 @@ export const SalesInvoiceDetailsView: React.FC<SalesInvoiceDetailsViewProps> = (
           <table className="w-full text-xs border-collapse text-slate-800">
             <thead>
               <tr className="bg-slate-50 font-bold border-y border-slate-200 text-slate-700 text-center">
-                <th className="py-2.5 px-2 w-[6%]">ক্রমিক</th>
-                <th className="py-2.5 px-3 text-left w-[32%]">পণ্যের নাম ও বিবরণ</th>
-                <th className="py-2.5 px-2 w-[14%]">ব্র্যান্ড</th>
-                <th className="py-2.5 px-2 w-[14%]">গ্রেড/সাইজ</th>
-                <th className="py-2.5 px-2 w-[10%]">পরিমাণ</th>
-                <th className="py-2.5 px-2 w-[8%]">একক</th>
-                <th className="py-2.5 px-2 text-right w-[12%]">একক মূল্য (৳)</th>
-                <th className="py-2.5 px-3 text-right w-[14%]">মোট মূল্য (৳)</th>
+                <th className="py-2.5 px-2 w-[5%]">ক্রমিক</th>
+                <th className="py-2.5 px-3 text-left w-[27%]">পণ্যের নাম ও বিবরণ</th>
+                <th className="py-2.5 px-2 w-[11%]">ব্র্যান্ড</th>
+                <th className="py-2.5 px-2 w-[10%]">গ্রেড/সাইজ</th>
+                <th className="py-2.5 px-2 w-[8%]">পরিমাণ</th>
+                <th className="py-2.5 px-2 text-right w-[11%]">ক্রয় দর (৳)</th>
+                <th className="py-2.5 px-2 text-right w-[11%]">বিক্রয় দর (৳)</th>
+                <th className="py-2.5 px-3 text-right w-[12%]">মোট মূল্য (৳)</th>
+                <th className="py-2.5 px-3 text-right w-[13%]">লাভ (Profit)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-4 text-center text-slate-400 font-bold">কোনো পণ্য নির্বাচন করা হয়নি</td>
+                  <td colSpan={9} className="py-4 text-center text-slate-400 font-bold">কোনো পণ্য নির্বাচন করা হয়নি</td>
                 </tr>
               ) : (
                 items.map((item: any, idx: number) => {
                   const itemPrice = Number(item.price || 0);
                   const itemQty = Number(item.quantity || 0);
                   const itemTotal = Number(item.total || ((itemPrice - Number(item.discount || 0)) * itemQty));
+                  const itemCost = getItemCost(item);
+                  const rowCost = itemCost * itemQty;
+                  const rowProfit = itemTotal - rowCost;
 
                   const parsed = parseProductDetails(item);
                   const isRod = parsed.categoryName === 'রড' || (item.unit || '').includes('কেজি') || (item.unit || '').includes('টন') || (item.name || '').includes('রড') || (item.name || '').includes('মিলি');
@@ -560,16 +626,28 @@ export const SalesInvoiceDetailsView: React.FC<SalesInvoiceDetailsViewProps> = (
                         {item.variant || '—'}
                       </td>
                       <td className="py-2.5 px-2 text-center font-mono font-bold text-slate-900">
-                        {toBengaliDigits(itemQty.toLocaleString('en-IN'))}
+                        {toBengaliDigits(itemQty.toLocaleString('en-IN'))} {isRing ? 'কেজি' : (item.unit || 'পিস')}
                       </td>
-                      <td className="py-2.5 px-2 text-center text-slate-600">
-                        {isRing ? 'কেজি' : (item.unit || 'পিস')}
+                      <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-600">
+                        {itemCost > 0 ? `৳ ${toBengaliDigits(itemCost.toLocaleString('en-IN', { minimumFractionDigits: 2 }))}` : '—'}
                       </td>
                       <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900">
                         ৳ {toBengaliDigits(itemPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 }))}
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono font-black text-slate-900">
                         ৳ {toBengaliDigits(itemTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 }))}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold">
+                        {itemCost > 0 ? (
+                          <span className={cn(
+                            "px-2 py-0.5 rounded text-[11px] font-black inline-block",
+                            rowProfit >= 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"
+                          )}>
+                            {rowProfit >= 0 ? '+' : ''}৳ {toBengaliDigits(Math.round(rowProfit).toLocaleString('en-IN'))}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">—</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -587,8 +665,8 @@ export const SalesInvoiceDetailsView: React.FC<SalesInvoiceDetailsViewProps> = (
 
       </div>
 
-      {/* --- SECTION 3: 2 CARDS (FINANCIAL BREAKDOWN & PAYMENT DETAILS) --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* --- SECTION 3: 3 CARDS (FINANCIAL BREAKDOWN, PAYMENT DETAILS & PROFIT ANALYSIS) --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         
         {/* Card 1: মোট হিসাব ও বকেয়া বিবরণী */}
         <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-xs">
@@ -947,6 +1025,68 @@ export const SalesInvoiceDetailsView: React.FC<SalesInvoiceDetailsViewProps> = (
               <span className="font-black text-slate-900 text-sm">মোট জমা / পরিশোধিত</span>
               <span className="font-mono font-black text-emerald-600 text-lg">৳ {toBengaliDigits(paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 }))}</span>
             </div>
+          </div>
+        </div>
+
+        {/* Card 3: চালানের নিট লাভ ও মার্জিন বিশ্লেষণ */}
+        <div className={cn(
+          "rounded-xl border p-4 space-y-3 shadow-xs",
+          invoiceProfit.profit >= 0 
+            ? "bg-gradient-to-br from-emerald-50/80 via-white to-teal-50/40 border-emerald-200" 
+            : "bg-gradient-to-br from-rose-50/80 via-white to-pink-50/40 border-rose-200"
+        )}>
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100 text-slate-900 font-black text-sm">
+            <div className="flex items-center gap-2">
+              <TrendingUp className={cn("w-4 h-4", invoiceProfit.profit >= 0 ? "text-emerald-600" : "text-rose-600")} />
+              <h3>চালানের লাভ ও মার্জিন</h3>
+            </div>
+            <span className={cn(
+              "text-[10px] font-black px-2 py-0.5 rounded-full border shadow-2xs",
+              invoiceProfit.profit >= 0 
+                ? "bg-emerald-100 text-emerald-800 border-emerald-300" 
+                : "bg-rose-100 text-rose-800 border-rose-300"
+            )}>
+              {toBengaliDigits(invoiceProfit.margin)}% মার্জিন
+            </span>
+          </div>
+
+          <div className="space-y-2.5 text-xs font-medium text-slate-700">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">মোট বিক্রয় (ছাড় পরবর্তী)</span>
+              <span className="font-mono font-bold text-slate-900">
+                ৳ {toBengaliDigits(invoiceProfit.netProductRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 }))}
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">মোট ক্রয় খরচ (পণ্যমূল্য)</span>
+              <span className="font-mono font-bold text-slate-700">
+                ৳ {toBengaliDigits(invoiceProfit.totalCost.toLocaleString('en-IN', { minimumFractionDigits: 2 }))}
+              </span>
+            </div>
+
+            <div className="pt-2 border-t border-slate-200">
+              <div className={cn(
+                "p-3 rounded-lg border flex flex-col items-center justify-center text-center shadow-2xs",
+                invoiceProfit.profit >= 0 
+                  ? "bg-emerald-50/90 border-emerald-300" 
+                  : "bg-rose-50/90 border-rose-300"
+              )}>
+                <span className="text-[11px] font-bold text-slate-600">
+                  {invoiceProfit.profit >= 0 ? 'চালানের আনুমানিক নিট লাভ' : 'চালানের মোট ক্ষতি / লোকসান'}
+                </span>
+                <span className={cn(
+                  "text-2xl font-black font-mono tracking-tight mt-0.5",
+                  invoiceProfit.profit >= 0 ? "text-emerald-700" : "text-rose-700"
+                )}>
+                  {invoiceProfit.profit >= 0 ? '+' : ''}৳ {toBengaliDigits(invoiceProfit.profit.toLocaleString('en-IN', { minimumFractionDigits: 2 }))}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-slate-400 text-center font-bold">
+              * ইনভয়েসে অন্তর্ভুক্ত প্রতিটি পণ্যের বিক্রয়দর ও ক্রয়মূল্যের পার্থক্য অনুযায়ী হিসাবকৃত।
+            </p>
           </div>
         </div>
 

@@ -53,7 +53,9 @@ import {
   Copy,
   Check,
   Search,
-  Tag
+  Tag,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -258,6 +260,8 @@ export default function Dashboard() {
   const [copiedReport, setCopiedReport] = useState(false);
   const [showTextPreview, setShowTextPreview] = useState(false);
   const [productPriceSearch, setProductPriceSearch] = useState('');
+  const [showCashBalance, setShowCashBalance] = useState(false);
+  const [showBankBalance, setShowBankBalance] = useState(false);
 
   const fetchDashboardData = useCallback(() => {
     Promise.all([
@@ -851,6 +855,9 @@ ${dayRodReturnKg > 0 ? `রড ফেরত = ${formatRodVal(dayRodReturnKg, tru
             strokeColor={totalCashBalance < 0 ? '#ef4444' : '#10b981'}
             gradId="cashGrad"
             graphData={weeklyData.map(d => ({ v: d.বিক্রয় }))}
+            isMaskable={true}
+            isRevealed={showCashBalance}
+            onToggleReveal={() => setShowCashBalance(prev => !prev)}
           />
 
           {/* CARD 2: BANK BALANCE (Stepped Line Chart) */}
@@ -867,6 +874,9 @@ ${dayRodReturnKg > 0 ? `রড ফেরত = ${formatRodVal(dayRodReturnKg, tru
             graphType="step"
             strokeColor={totalBankBalance < 0 ? '#ef4444' : '#3b82f6'}
             graphData={weeklyData.map(d => ({ v: d.ক্রয় }))}
+            isMaskable={true}
+            isRevealed={showBankBalance}
+            onToggleReveal={() => setShowBankBalance(prev => !prev)}
           />
 
           {/* CARD 3: TOTAL DUES (Pillar Bar Histogram Chart) */}
@@ -1152,11 +1162,26 @@ ${dayRodReturnKg > 0 ? `রড ফেরত = ${formatRodVal(dayRodReturnKg, tru
             <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between gap-3">
               {/* 0. Cash & Cheque Collection Summary */}
               <div className="grid grid-cols-2 gap-2">
-                <div className="bg-gradient-to-br from-emerald-50/80 to-teal-50/50 border border-emerald-200/90 rounded-2xl p-2.5 flex items-center justify-between shadow-2xs">
+                <div 
+                  onClick={() => setShowCashBalance(prev => !prev)}
+                  className="bg-gradient-to-br from-emerald-50/80 to-teal-50/50 border border-emerald-200/90 hover:border-emerald-400 rounded-2xl p-2.5 flex items-center justify-between shadow-2xs cursor-pointer select-none transition-all group"
+                  title={showCashBalance ? "ক্যাশ ব্যালেন্স লুকাতে ক্লিক করুন" : "ক্যাশ ব্যালেন্স দেখতে ক্লিক করুন"}
+                >
                   <div>
-                    <p className="text-[9.5px] font-bold text-emerald-800 leading-none">১/ ক্যাশ ব্যালেন্স</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[9.5px] font-bold text-emerald-800 leading-none">১/ ক্যাশ ব্যালেন্স</p>
+                      {showCashBalance ? (
+                        <EyeOff className="w-2.5 h-2.5 text-emerald-600 opacity-60 group-hover:opacity-100" />
+                      ) : (
+                        <Eye className="w-2.5 h-2.5 text-emerald-600 opacity-60 group-hover:opacity-100" />
+                      )}
+                    </div>
                     <p className="text-xs sm:text-sm font-black text-emerald-700 mt-1">
-                      {dailyReportData.totalCashBalance !== 0 ? `${toBengaliDigits(Math.round(dailyReportData.totalCashBalance).toLocaleString('en-IN'))} ৳` : '০০ ৳'}
+                      {showCashBalance ? (
+                        dailyReportData.totalCashBalance !== 0 ? `${toBengaliDigits(Math.round(dailyReportData.totalCashBalance).toLocaleString('en-IN'))} ৳` : '০০ ৳'
+                      ) : (
+                        <span className="font-mono text-emerald-700/80 tracking-wider text-xs font-black">•••• ৳</span>
+                      )}
                     </p>
                   </div>
                   <div className="w-7 h-7 rounded-lg bg-emerald-100/90 text-emerald-700 flex items-center justify-center shrink-0">
@@ -1607,7 +1632,10 @@ function StatCard({
   graphType,
   graphData,
   strokeColor,
-  gradId
+  gradId,
+  isMaskable,
+  isRevealed,
+  onToggleReveal
 }: any) {
   const isMounted = useIsMounted();
 
@@ -1623,8 +1651,26 @@ function StatCard({
             <Icon className="w-5 h-5" />
           </div>
         </div>
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none">{value}</h3>
+        <div className="flex items-center gap-2 flex-wrap min-h-[32px]">
+          {isMaskable ? (
+            <div 
+              onClick={onToggleReveal}
+              className="flex items-center gap-2 cursor-pointer select-none group/val"
+              title={isRevealed ? "ব্যালেন্স লুকান" : "ব্যালেন্স দেখতে ক্লিক করুন"}
+            >
+              <h3 className={cn(
+                "text-2xl font-black tracking-tight leading-none transition-colors",
+                isRevealed ? "text-slate-900" : "text-slate-400 font-mono tracking-wider"
+              )}>
+                {isRevealed ? value : "৳ ••••••"}
+              </h3>
+              <span className="text-slate-400 group-hover/val:text-slate-700 transition-colors">
+                {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </span>
+            </div>
+          ) : (
+            <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none">{value}</h3>
+          )}
           {subValue && (
             <span className="text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md">
               {subValue}

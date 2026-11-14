@@ -216,7 +216,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         <div className="min-h-screen flex flex-col items-center justify-center bg-[#faf8f5]">
           <div className="flex flex-col items-center gap-4 p-6 text-center animate-in fade-in duration-200">
             <div className="relative w-16 h-16 rounded-2xl bg-white shadow-sm border border-[#b88e2d]/25 flex items-center justify-center p-2.5">
-              <Image src="/logo.png" alt="মেসার্স দেলোয়ার এন্ড ব্রাদার্স" width={48} height={48} className="object-contain" priority />
+              <Image src="/logo.png" alt="ERP" width={48} height={48} className="object-contain" priority />
             </div>
             <div className="flex items-center gap-2.5">
               <div className="w-4 h-4 border-2 border-[#b88e2d] border-t-transparent rounded-full animate-spin"></div>

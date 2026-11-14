@@ -6,6 +6,7 @@ import { Printer, FileText, User, Truck, ClipboardList, CreditCard, Edit3 } from
 import { cn } from '@/lib/utils';
 import { toBengaliDigits, numberToBengaliWords, parseProductDetails, cleanLegacyBengaliText } from '@/lib/bengaliUtils';
 import { printElement } from '@/lib/printUtils';
+import { useShopSettings } from '@/lib/shopSettingsContext';
 
 export interface OrderItem {
   id?: string;
@@ -104,13 +105,14 @@ export const InvoiceMemo: React.FC<InvoiceMemoProps> = ({
   shopInfo: propShopInfo,
   showPrintButton = true
 }) => {
+  const { shopName, settings: globalSettings } = useShopSettings();
   const handleTriggerPrint = () => {
     printElement('printable-memo-wrapper');
   };
 
   const [shop] = useState(() => {
     const defaultShop = {
-      name: 'মেসার্স দেলোয়ার এন্ড ব্রাদার্স',
+      name: 'ব্রাদার্স এন্টারপ্রাইজ',
       proprietor: 'প্রোঃ- মোঃ মিকাইল শেখ',
       tagline: 'পাইকারী ও খুচরা বিক্রয় কেন্দ্র',
       address: '৩১০, চৌধুরী নিউ সুপার মার্কেট, বঙ্গবন্ধু সড়ক, গোপালগঞ্জ',
@@ -322,14 +324,14 @@ export const InvoiceMemo: React.FC<InvoiceMemoProps> = ({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img 
                 src="/logo.png" 
-                alt="মেসার্স দেলোয়ার এন্ড ব্রাদার্স" 
+                alt={propShopInfo?.name || shopName} 
                 className="w-12 h-12 object-contain rounded-md border border-slate-200 bg-white p-0.5 shadow-2xs" 
               />
             </div>
 
             <div className="space-y-0.5 text-xs text-slate-700 font-medium">
               <h1 className="text-xl font-black text-slate-900 tracking-tight leading-tight">
-                {shop.name}
+                {propShopInfo?.name || shopName}
               </h1>
               {shop.tagline && (
                 <p className="text-[11px] font-bold text-[#8c6b1c]">

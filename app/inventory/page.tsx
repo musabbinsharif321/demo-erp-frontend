@@ -20,6 +20,7 @@ import { format } from 'date-fns';
 import { bn } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/authContext';
+import { useShopSettings } from '@/lib/shopSettingsContext';
 
 interface Product {
   id: string;
@@ -227,6 +228,7 @@ const formatGrandTotal = (value: number): string => {
 };
 
 export default function InventoryPage() {
+  const { shopName } = useShopSettings();
   const { canModifyData } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1704,7 +1706,7 @@ export default function InventoryPage() {
                   color: '#000000'
                 }}
               >
-                মেসার্স দেলোয়ার এন্ড ব্রাদার্স
+                {shopName}
               </th>
             </tr>
             {/* Header Row 2: স্টক */}

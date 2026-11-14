@@ -4,6 +4,7 @@ import './globals.css';
 import { Toaster } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
 import { AuthProvider } from '@/lib/authContext';
+import { ShopSettingsProvider } from '@/lib/shopSettingsContext';
 import { BanglaInputProvider } from '@/components/BanglaInputProvider';
 import { PwaManager } from '@/components/PwaManager';
 import { NumberInputWheelDisable } from '@/components/NumberInputWheelDisable';
@@ -27,13 +28,13 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'স্মার্ট বিজনেস ইআরপি - ইউনিভার্সাল শপ ম্যানেজমেন্ট',
-  description: 'দোকান ও ব্যবসা প্রতিষ্ঠানের সম্পূর্ণ ডিজিটাল ক্রয়-বিক্রয়, স্টক ও হিসাব পরিচালনা ব্যবস্থা',
+  title: 'ব্রাদার্স এন্টারপ্রাইজ - স্মার্ট বিজনেস ইআরপি',
+  description: 'ব্রাদার্স এন্টারপ্রাইজ - সম্পূর্ণ ডিজিটাল ক্রয়-বিক্রয়, স্টক ও হিসাব পরিচালনা ব্যবস্থা',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'স্মার্ট ইআরপি',
+    title: 'ব্রাদার্স এন্টারপ্রাইজ',
   },
   formatDetection: {
     telephone: false,
@@ -55,14 +56,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="bn" className={cn(inter.variable, hindSiliguri.variable, "font-bengali")} suppressHydrationWarning>
       <body suppressHydrationWarning className="bg-[#faf8f5] text-[#2e2316] min-h-screen antialiased">
-        <AuthProvider>
-          <BanglaInputProvider>
-            {children}
+        <ShopSettingsProvider>
+          <AuthProvider>
+            <BanglaInputProvider>
+              {children}
             <NumberInputWheelDisable />
             <PwaManager />
             <Toaster position="top-center" richColors />
           </BanglaInputProvider>
         </AuthProvider>
+        </ShopSettingsProvider>
       </body>
     </html>
   );

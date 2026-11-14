@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { toBengaliDigits } from '@/lib/bengaliUtils';
 import { BengaliDatePicker } from '@/components/ui/BengaliDatePicker';
 import { SalesInvoiceDetailsView } from '@/components/SalesInvoiceDetailsView';
+import { useShopSettings } from '@/lib/shopSettingsContext';
 
 export interface LoadingChargeEntry {
   id: string; // transaction id
@@ -53,6 +54,7 @@ export interface LoadingChargeEntry {
 }
 
 export default function LoadingChargesPage() {
+  const { shopName } = useShopSettings();
   const [entries, setEntries] = useState<LoadingChargeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -337,7 +339,7 @@ export default function LoadingChargesPage() {
         </head>
         <body>
           <div class="header">
-            <h2>মেসার্স দেলোয়ার এন্ড ব্রাদার্স</h2>
+            <h2>${shopName}</h2>
             <p>লোডিং ও লেবার বিল পরিশোধ ভাউচার</p>
           </div>
           <div class="box">

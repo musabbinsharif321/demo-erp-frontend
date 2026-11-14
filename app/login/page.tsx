@@ -7,6 +7,7 @@ import {
   ArrowRight, AlertCircle, Store, ShieldAlert, Loader2
 } from 'lucide-react';
 import { useAuth } from '@/lib/authContext';
+import { useShopSettings } from '@/lib/shopSettingsContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -18,6 +19,7 @@ const REMEMBER_ME_KEY = 'dokan_remember_me';
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
+  const { shopName } = useShopSettings();
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -104,12 +106,12 @@ export default function LoginPage() {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img 
                 src="/logo.png" 
-                alt="মেসার্স দেলোয়ার এন্ড ব্রাদার্স" 
+                alt={shopName} 
                 className="w-full h-full object-contain"
               />
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              মেসার্স দেলোয়ার এন্ড ব্রাদার্স
+              {shopName}
             </h1>
             <p className="text-xs text-slate-600 mt-1 font-semibold">
               অনুমোদিত জিমেইল (Gmail) ও পাসওয়ার্ড দিয়ে সিস্টেমে প্রবেশ করুন
@@ -248,7 +250,7 @@ export default function LoginPage() {
 
         {/* Minimal Clean Footer */}
         <p className="text-center text-[11px] text-slate-400 font-medium mt-6">
-          © ২০২৬ মেসার্স দেলোয়ার এন্ড ব্রাদার্স &bull; সর্বস্বত্ব সংরক্ষিত
+          © ২০২৬ {shopName} &bull; সর্বস্বত্ব সংরক্ষিত
         </p>
       </div>
     </div>

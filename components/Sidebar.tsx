@@ -101,11 +101,13 @@ interface SidebarProps {
 }
 
 import { useAuth } from '@/lib/authContext';
+import { useShopSettings } from '@/lib/shopSettingsContext';
 
 export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, role, isAdmin, isDeveloper, logout } = useAuth();
+  const { shopName } = useShopSettings();
   const searchParams = useSearchParams();
   const currentType = searchParams?.get('type');
   
@@ -204,14 +206,14 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img 
                   src="/logo.png" 
-                  alt="স্মার্ট বিজনেস ইআরপি" 
+                  alt={shopName} 
                   className="w-full h-full object-contain rounded-lg"
                 />
               </div>
               {(isExpanded || mobileOpen) && (
                 <div className="overflow-hidden whitespace-nowrap transition-all duration-200">
-                  <h1 className="text-sm font-black text-white leading-tight drop-shadow-xs">স্মার্ট বিজনেস ইআরপি</h1>
-                  <p className="text-[10px] text-amber-100 font-semibold drop-shadow-2xs">অল-ইন-ওয়ান শপ ম্যানেজমেন্ট</p>
+                  <h1 className="text-sm font-black text-white leading-tight drop-shadow-xs">{shopName}</h1>
+                  <p className="text-[10px] text-amber-100 font-semibold drop-shadow-2xs">স্মার্ট বিজনেস ইআরপি</p>
                 </div>
               )}
             </div>

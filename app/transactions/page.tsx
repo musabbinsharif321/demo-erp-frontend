@@ -32,6 +32,7 @@ import { BengaliDateRangePicker } from '@/components/ui/BengaliDateRangePicker';
 import { BengaliDatePicker } from '@/components/ui/BengaliDatePicker';
 import { printElement } from '@/lib/printUtils';
 import { useAuth } from '@/lib/authContext';
+import { useShopSettings } from '@/lib/shopSettingsContext';
 
 interface Transaction {
   id: string;
@@ -119,6 +120,7 @@ interface OrderInvoice {
 }
 
 function TransactionsContent() {
+  const { shopName } = useShopSettings();
   const { canEditInvoice, canDeleteInvoice, canCreateInvoice } = useAuth();
   const searchParams = useSearchParams();
   const partyParam = searchParams ? searchParams.get('party') : null;
@@ -2867,11 +2869,11 @@ function TransactionsContent() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img 
                       src="/logo.png" 
-                      alt="মেসার্স দেলোয়ার এন্ড ব্রাদার্স" 
+                      alt={shopName} 
                       className="w-12 h-12 object-contain rounded-lg border border-slate-200 bg-white p-0.5" 
                     />
                     <div>
-                      <h2 className="text-xl font-black text-slate-900">মেসার্স দেলোয়ার এন্ড ব্রাদার্স</h2>
+                      <h2 className="text-xl font-black text-slate-900">{shopName}</h2>
                       <p className="text-xs text-slate-500">রড, সিমেন্ট ও বিল্ডিং সামগ্রী পাইকারী ও খুচরা সরবরাহ কেন্দ্র</p>
                     </div>
                   </div>

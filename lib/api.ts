@@ -322,13 +322,13 @@ export const api = {
         const list: any = await request<ShopSettingsData[]>('/settings/');
         const arr = Array.isArray(list) ? list : (list?.results || []);
         return arr.length > 0 ? arr[0] : {
-          business_name: 'মেসার্স দেলোয়ার এন্ড ব্রাদার্স',
+          business_name: 'ব্রাদার্স এন্টারপ্রাইজ',
           phone: '০১৭১২-০১৪২২৫',
           currency: '৳'
         };
       } catch (e) {
         return {
-          business_name: 'মেসার্স দেলোয়ার এন্ড ব্রাদার্স',
+          business_name: 'ব্রাদার্স এন্টারপ্রাইজ',
           phone: '০১৭১২-০১৪২২৫',
           currency: '৳'
         };

@@ -7,6 +7,7 @@ import { DEVELOPER_LOGO_BASE64 } from '@/lib/developerLogo';
 import { format } from 'date-fns';
 import { bn } from 'date-fns/locale';
 import { computeSiteAdvanceAdjustments } from '@/lib/ledgerUtils';
+import { useShopSettings } from '@/lib/shopSettingsContext';
 
 export interface PrintLedgerRow {
   date: string;
@@ -663,6 +664,7 @@ export const PartyLedgerPrintMemo: React.FC<PartyLedgerPrintMemoProps> = ({
   categoryFilter = 'all',
   txnTypeFilter = 'all'
 }) => {
+  const { shopName } = useShopSettings();
   const [promo] = React.useState(() => {
     const defaults = {
       softwareCompany: 'Hasanah Tech Solution',
@@ -725,7 +727,7 @@ export const PartyLedgerPrintMemo: React.FC<PartyLedgerPrintMemoProps> = ({
             মোবাইলঃ ০১৭১২-০১৪২২৫, ০১৭২৭-৯৫২৫১৩
           </p>
           <h1 className="text-2xl sm:text-3xl font-black text-[#154284] tracking-tight leading-tight">
-            মেসার্স দেলোয়ার এন্ড ব্রাদার্স
+            {shopName}
           </h1>
           <p className="text-xs font-bold text-[#9e1c1c]">
             প্রোঃ- মোঃ মিকাঈল শেখ

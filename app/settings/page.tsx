@@ -17,11 +17,54 @@ import {
 } from 'lucide-react';
 import { api, UserData } from '@/lib/api';
 import { useAuth } from '@/lib/authContext';
+import { useShopSettings } from '@/lib/shopSettingsContext';
 import { cn } from '@/lib/utils';
 import { toEnglishDigits } from '@/lib/bengaliUtils';
 
 export default function SettingsPage() {
   const { user: currentUser, token, isAdmin, refreshUser } = useAuth();
+  const { settings: shopSettings, updateSettings } = useShopSettings();
+
+  // 0. Shop / Business Info State (for Admin)
+  const [shopDraft, setShopDraft] = useState<{
+    business_name?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    receipt_footer?: string;
+  }>({});
+  const [isSavingShop, setIsSavingShop] = useState(false);
+
+  const shopBusinessName = shopDraft.business_name ?? shopSettings?.business_name ?? '';
+  const shopPhone = shopDraft.phone ?? shopSettings?.phone ?? '';
+  const shopEmail = shopDraft.email ?? shopSettings?.email ?? '';
+  const shopAddress = shopDraft.address ?? shopSettings?.address ?? '';
+  const shopReceiptFooter = shopDraft.receipt_footer ?? shopSettings?.receipt_footer ?? '';
+
+  const handleSaveShopSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!shopBusinessName.trim()) {
+      toast.error('দোকানের নাম খালি রাখা যাবে না!');
+      return;
+    }
+    try {
+      setIsSavingShop(true);
+      await updateSettings({
+        business_name: shopBusinessName.trim(),
+        phone: shopPhone.trim(),
+        email: shopEmail.trim(),
+        address: shopAddress.trim(),
+        receipt_footer: shopReceiptFooter.trim(),
+      });
+      setShopDraft({});
+      toast.success('দোকানের নাম ও তথ্য সফলভাবে আপডেট হয়েছে! পুরো সফটওয়্যারে নতুন নাম দেখাবে।');
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'দোকানের তথ্য সংরক্ষণ করা সম্ভব হয়নি');
+    } finally {
+      setIsSavingShop(false);
+    }
+  };
 
   // 1. Current User Profile State
   const [profileName, setProfileName] = useState('');
@@ -173,7 +216,7 @@ export default function SettingsPage() {
         localStorage.setItem('commission_pin', pinVal);
         window.dispatchEvent(new CustomEvent('commissionPinUpdated', { detail: pinVal }));
       }
-      await api.settings.update(1, { commission_pin: pinVal });
+      await updateSettings({ commission_pin: pinVal });
       setCommissionPin(pinVal);
       toast.success('কমিশন অনুমোদন পাসওয়ার্ড সফলভাবে সংরক্ষিত হয়েছে!');
     } catch (err) {
@@ -665,6 +708,89 @@ export default function SettingsPage() {
             </form>
           </CardContent>
         </Card>
+
+        {/* 1.5 SHOP / BUSINESS INFO CARD (ADMIN ONLY) */}
+        {isAdmin && (
+          <Card className="border-emerald-200/80 shadow-sm rounded-2xl overflow-hidden bg-white">
+            <CardHeader className="bg-emerald-50/70 border-b border-emerald-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-black text-slate-800">দোকান / প্রতিষ্ঠানের তথ্য</CardTitle>
+                  <CardDescription className="text-xs text-slate-600 font-medium">
+                    এখান থেকে দোকানের নাম পরিবর্তন করলে পুরো সফটওয়্যার (সাইডবার, লগইন, ইনভয়েস, মেমো ও রিপোর্ট)-এ স্বয়ংক্রিয়ভাবে পরিবর্তন হবে।
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              <form onSubmit={handleSaveShopSettings} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="font-bold text-xs text-slate-700">দোকানের / প্রতিষ্ঠানের নাম <span className="text-rose-500">*</span></Label>
+                    <Input
+                      value={shopBusinessName}
+                      onChange={(e) => setShopDraft(prev => ({ ...prev, business_name: e.target.value }))}
+                      placeholder="যেমন: মেসার্স ব্রাদার্স এন্টারপ্রাইজ"
+                      required
+                      className="font-bold rounded-xl bg-slate-50/60"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="font-bold text-xs text-slate-700">মোবাইল / ফোন নম্বর</Label>
+                    <Input
+                      value={shopPhone}
+                      onChange={(e) => setShopDraft(prev => ({ ...prev, phone: e.target.value }))}
+                      placeholder="০১৭০০-০০০০০০"
+                      className="font-bold rounded-xl bg-slate-50/60"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="font-bold text-xs text-slate-700">ইমেইল</Label>
+                    <Input
+                      type="email"
+                      value={shopEmail}
+                      onChange={(e) => setShopDraft(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="info@example.com"
+                      data-no-bangla="true"
+                      className="font-mono rounded-xl bg-slate-50/60 no-bangla"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="font-bold text-xs text-slate-700">ঠিকানা</Label>
+                    <Input
+                      value={shopAddress}
+                      onChange={(e) => setShopDraft(prev => ({ ...prev, address: e.target.value }))}
+                      placeholder="দোকানের ঠিকানা লিখুন..."
+                      className="font-medium rounded-xl bg-slate-50/60"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="font-bold text-xs text-slate-700">রসিদ / মেমোর ফুটার বার্তা</Label>
+                  <Input
+                    value={shopReceiptFooter}
+                    onChange={(e) => setShopDraft(prev => ({ ...prev, receipt_footer: e.target.value }))}
+                    placeholder="ধন্যবাদ, আবার আসবেন!"
+                    className="font-medium rounded-xl bg-slate-50/60"
+                  />
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button
+                    type="submit"
+                    disabled={isSavingShop}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-7 h-10 rounded-xl shadow-xs flex items-center gap-2 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{isSavingShop ? 'সংরক্ষণ হচ্ছে...' : 'দোকানের তথ্য সেভ করুন'}</span>
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        )}
 
         {/* 2. COMMISSION APPROVAL PIN CARD (ADMIN ONLY) */}
         {isAdmin && (

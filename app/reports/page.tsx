@@ -124,6 +124,17 @@ interface ReportExpense {
   paymentMethod?: string;
 }
 
+interface ReportCapitalEntry {
+  id: string;
+  ownerName: string;
+  category: string;
+  amount: number;
+  date: string;
+  paymentMethod: string;
+  bankName?: string;
+  note?: string;
+}
+
 interface ReportProduct {
   id: string;
   name: string;
@@ -190,6 +201,7 @@ function MasterReportsContent() {
   const [orders, setOrders] = useState<ReportOrder[]>([]);
   const [purchases, setPurchases] = useState<ReportPurchase[]>([]);
   const [expenses, setExpenses] = useState<ReportExpense[]>([]);
+  const [capitals, setCapitals] = useState<ReportCapitalEntry[]>([]);
   const [products, setProducts] = useState<ReportProduct[]>([]);
   const [customers, setCustomers] = useState<ReportParty[]>([]);
   const [suppliers, setSuppliers] = useState<ReportParty[]>([]);
@@ -382,6 +394,59 @@ function MasterReportsContent() {
       }));
       setBanks(mappedBanks);
 
+      // 7. Map Capital / Add Money Entries (টাকা যোগ)
+      const mappedCapitals: ReportCapitalEntry[] = [];
+      safeTx.forEach((t: any) => {
+        if (t.status === 'cancelled' || t.status === 'rejected') return;
+        const rawNoteStr = String(t.notes || '');
+        let meta: any = {};
+        if (rawNoteStr.startsWith('{')) {
+          const firstLine = rawNoteStr.split('\n')[0];
+          try {
+            meta = JSON.parse(firstLine);
+          } catch {
+            // ignore non-json
+          }
+        }
+        const isTransfer =
+          meta.isTransfer === true ||
+          rawNoteStr.includes('[ব্যালেন্স ট্রান্সফার') ||
+          rawNoteStr.includes('ক্যাশ টু ব্যাংক') ||
+          rawNoteStr.includes('ব্যাংক টু ক্যাশ') ||
+          rawNoteStr.includes('ব্যাংক টু ব্যাংক');
+        const isAddMoney =
+          !isTransfer &&
+          (meta.isAddMoney === true ||
+            meta.category === 'টাকা যোগ' ||
+            rawNoteStr.includes('[টাকা যোগ') ||
+            t.transaction_type === 'contra');
+
+        if (!isAddMoney) return;
+
+        const categoryLabel = meta.addMoneyCategory || 'টাকা যোগ';
+        const ownerName =
+          (meta.ownerName && String(meta.ownerName).trim()) ||
+          (t.party_name && String(t.party_name).trim()) ||
+          (meta.partyName && String(meta.partyName).trim()) ||
+          categoryLabel;
+
+        const dateStr =
+          meta.date ||
+          (t.created_at ? format(new Date(t.created_at), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
+
+        mappedCapitals.push({
+          id: String(t.id),
+          ownerName,
+          category: categoryLabel,
+          amount: Number(t.paid_amount || t.total_amount || 0),
+          date: dateStr,
+          paymentMethod: t.payment_method || 'cash',
+          bankName: t.cheque_bank || '',
+          note: meta.userNote || '',
+        });
+      });
+      setCapitals(mappedCapitals);
+
     } catch (err) {
       console.error('Failed to load reports data:', err);
       toast.error('রিপোর্ট ডাটা লোড করতে সমস্যা হয়েছে');
@@ -569,6 +634,37 @@ function MasterReportsContent() {
       netMargin
     };
   }, [salesMetrics, purchaseExpenseMetrics]);
+
+  // CAPITAL / MULDHON METRICS (FROM টাকা যোগ)
+  const capitalMetrics = useMemo(() => {
+    let totalCapital = 0;
+    let periodCapital = 0;
+    const ownerMap = new Map<string, { ownerName: string; count: number; total: number; periodTotal: number }>();
+
+    capitals.forEach(c => {
+      totalCapital += c.amount;
+      const inRange = (!startDate || c.date >= startDate) && (!endDate || c.date <= endDate);
+      if (inRange) {
+        periodCapital += c.amount;
+      }
+      const key = c.ownerName.trim() || 'অনির্ধারিত মূলধন';
+      const existing = ownerMap.get(key) || { ownerName: key, count: 0, total: 0, periodTotal: 0 };
+      existing.count += 1;
+      existing.total += c.amount;
+      if (inRange) existing.periodTotal += c.amount;
+      ownerMap.set(key, existing);
+    });
+
+    const ownerSummaries = Array.from(ownerMap.values()).sort((a, b) => b.total - a.total);
+    const sortedEntries = [...capitals].sort((a, b) => b.date.localeCompare(a.date));
+
+    return {
+      totalCapital: Math.round(totalCapital),
+      periodCapital: Math.round(periodCapital),
+      ownerSummaries,
+      sortedEntries,
+    };
+  }, [capitals, startDate, endDate]);
 
   // INVENTORY & STOCK METRICS
   const inventoryMetrics = useMemo(() => {
@@ -1658,6 +1754,89 @@ function MasterReportsContent() {
                       <span className="text-[10px] uppercase tracking-wider font-bold opacity-80">
                         {pnlMetrics.netProfit >= 0 ? 'নিট মুনাফা' : 'লোকসান'}
                       </span>
+                    </div>
+                  </div>
+
+                  {/* Section 6: Business Capital / Muldhon (from টাকা যোগ) */}
+                  <div className="space-y-4 pt-4 border-t border-slate-200">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-indigo-50/80 p-3.5 rounded-xl border border-indigo-200">
+                      <div>
+                        <span className="font-black text-indigo-950 text-sm block">৬. ব্যবসায়িক মূলধন ও অংশীদার বিবরণ (Capital)</span>
+                        <span className="text-[11px] text-indigo-700 font-semibold">লেনদেন &rarr; &ldquo;টাকা যোগ&rdquo; থেকে যুক্ত সকল মূলধনের হিসাব</span>
+                      </div>
+                      <div className="text-left sm:text-right">
+                        <span className="text-[10px] font-bold text-indigo-600 block">মোট মূলধন (সর্বমোট)</span>
+                        <span className="text-xl font-black text-indigo-800 font-mono">৳ {formatBnNum(capitalMetrics.totalCapital)}</span>
+                        {capitalMetrics.periodCapital !== capitalMetrics.totalCapital && (
+                          <span className="text-[10px] font-bold text-indigo-600 block">
+                            নির্বাচিত সময়ে যোগ: ৳ {formatBnNum(capitalMetrics.periodCapital)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Owner-wise Capital Summary (কার কত মূলধন) */}
+                    {capitalMetrics.ownerSummaries.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-black text-slate-700">কার কত মূলধন (মালিক / অংশীদার ভিত্তিক)</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {capitalMetrics.ownerSummaries.map((owner, idx) => (
+                            <div key={idx} className="p-3.5 rounded-xl border border-indigo-100 bg-indigo-50/30 flex items-center justify-between">
+                              <div>
+                                <span className="font-black text-slate-900 text-xs block">{owner.ownerName}</span>
+                                <span className="text-[10px] text-slate-500 font-bold">{toBengaliDigits(owner.count)} বার জমা</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-sm font-black text-indigo-700 font-mono block">৳ {formatBnNum(owner.total)}</span>
+                                <span className="text-[10px] text-slate-400 font-bold">মোট মূলধন</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Detailed Capital Entries Table */}
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-black text-slate-700">বিস্তারিত মূলধন এন্ট্রি সমূহ ({toBengaliDigits(capitalMetrics.sortedEntries.length)} টি)</h4>
+                      {capitalMetrics.sortedEntries.length === 0 ? (
+                        <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400 font-medium">
+                          কোনো মূলধন এন্ট্রি পাওয়া যায়নি। লেনদেন পেজের &ldquo;টাকা যোগ&rdquo; বাটন থেকে মূলধন যোগ করুন।
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-xs text-left">
+                            <thead className="bg-slate-50 text-slate-700 font-black border-b border-slate-200">
+                              <tr>
+                                <th className="py-2.5 px-3">তারিখ</th>
+                                <th className="py-2.5 px-3">মালিক / কার মূলধন</th>
+                                <th className="py-2.5 px-3">খাত</th>
+                                <th className="py-2.5 px-3">মাধ্যম</th>
+                                <th className="py-2.5 px-3">বিবরণ</th>
+                                <th className="py-2.5 px-3 text-right">পরিমাণ (৳)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {capitalMetrics.sortedEntries.map((entry) => (
+                                <tr key={entry.id} className="hover:bg-slate-50/70">
+                                  <td className="py-2.5 px-3 font-mono text-slate-600 whitespace-nowrap">{formatBnDate(entry.date)}</td>
+                                  <td className="py-2.5 px-3 font-bold text-slate-900">{entry.ownerName}</td>
+                                  <td className="py-2.5 px-3 text-slate-600">{entry.category}</td>
+                                  <td className="py-2.5 px-3 text-slate-600">
+                                    {entry.paymentMethod === 'bank'
+                                      ? `ব্যাংক${entry.bankName ? ` (${entry.bankName})` : ''}`
+                                      : entry.paymentMethod === 'cheque'
+                                        ? 'চেক'
+                                        : 'নগদ (ক্যাশ)'}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-slate-500">{entry.note || '—'}</td>
+                                  <td className="py-2.5 px-3 text-right font-mono font-black text-indigo-700">৳ {formatBnNum(entry.amount)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                   </div>
 

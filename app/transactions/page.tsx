@@ -204,6 +204,7 @@ function TransactionsContent() {
 
   // Add Money (টাকা যোগ) State
   const [addMoneyCategory, setAddMoneyCategory] = useState('ক্যাশে জমা (Add Cash)');
+  const [addMoneyOwnerName, setAddMoneyOwnerName] = useState<string>('');
   const [addMoneyAmount, setAddMoneyAmount] = useState<number>(0);
   const [addMoneyMethod, setAddMoneyMethod] = useState<'Cash' | 'Bank'>('Cash');
   const [addMoneyBankId, setAddMoneyBankId] = useState<string>('');
@@ -409,7 +410,11 @@ function TransactionsContent() {
         if (isTransfer) {
           addMoneyPartyName = rawPartyName || 'ব্যাংক ➔ ক্যাশ ট্রান্সফার';
         } else if (isAddMoney) {
-          if (meta.addMoneyCategory) {
+          if (meta.ownerName && meta.addMoneyCategory) {
+            addMoneyPartyName = `${meta.ownerName} (${meta.addMoneyCategory})`;
+          } else if (meta.ownerName) {
+            addMoneyPartyName = meta.ownerName;
+          } else if (meta.addMoneyCategory) {
             addMoneyPartyName = meta.addMoneyCategory;
           } else if (rawNoteStr.includes('[টাকা যোগ - ')) {
             const match = rawNoteStr.match(/\[টাকা যোগ - ([^\]]+)\]/);
@@ -722,29 +727,33 @@ function TransactionsContent() {
       return;
     }
 
+    const trimmedOwner = addMoneyOwnerName.trim();
     const metaJson = JSON.stringify({
       isAddMoney: true,
       category: 'টাকা যোগ',
       addMoneyCategory: addMoneyCategory,
-      partyName: addMoneyCategory,
+      ownerName: trimmedOwner || '',
+      partyName: trimmedOwner || addMoneyCategory,
+      date: addMoneyDate,
       userNote: addMoneyNote || ''
     });
 
     try {
       await api.transactions.create({
-        party_name: addMoneyCategory,
+        party_name: trimmedOwner || addMoneyCategory,
         transaction_type: 'payment_in',
         total_amount: addMoneyAmount,
         paid_amount: addMoneyAmount,
         due_amount: 0,
         payment_method: (addMoneyMethod.toLowerCase().includes('bank') ? 'bank' : addMoneyMethod.toLowerCase().includes('cheque') ? 'cheque' : addMoneyMethod.toLowerCase()),
         cheque_bank: addMoneyMethod === 'Bank' ? banks.find(b => b.id === addMoneyBankId)?.name : '',
-        notes: metaJson + '\n' + `[টাকা যোগ - ${addMoneyCategory}] ${addMoneyNote}`
+        notes: metaJson + '\n' + `[টাকা যোগ - ${trimmedOwner ? `${trimmedOwner} (${addMoneyCategory})` : addMoneyCategory}] ${addMoneyNote}`
       });
 
       toast.success('টাকা সফলভাবে যোগ করা হয়েছে!');
       setIsAddMoneyOpen(false);
       setAddMoneyAmount(0);
+      setAddMoneyOwnerName('');
       setAddMoneyNote('');
       loadAllTransactionsData();
     } catch (err: any) {
@@ -2947,6 +2956,19 @@ function TransactionsContent() {
                     <SelectItem value="অন্যান্য আয় (Other Income)">অন্যান্য আয় (Other Income)</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Owner / Partner Name for Capital */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-600">
+                  মালিক / অংশীদারের নাম (কার মূলধন) {addMoneyCategory.includes('মূলধন') ? '' : '(ঐচ্ছিক)'}
+                </Label>
+                <Input
+                  placeholder="যেমন: মোঃ রহিম / পার্টনার ১"
+                  value={addMoneyOwnerName}
+                  onChange={e => setAddMoneyOwnerName(e.target.value)}
+                  className="rounded-xl h-11 bg-slate-50/50 border-slate-200 text-xs font-bold"
+                />
               </div>
 
               {/* Amount */}

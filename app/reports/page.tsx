@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Shell } from '@/components/Shell';
 import { api, ShopSettingsData } from '@/lib/api';
+import { useShopSettings } from '@/lib/shopSettingsContext';
 import {
   BarChart3, Users, Landmark, FileText, ShoppingCart, 
   TrendingUp, RefreshCcw, Calendar, Search, 
@@ -170,6 +171,7 @@ type DatePreset = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_mon
 function MasterReportsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { shopName } = useShopSettings();
   const rawTab = searchParams ? searchParams.get('tab') : null;
 
   // Resolve aliases to canonical tabs
@@ -656,13 +658,11 @@ function MasterReportsContent() {
     });
 
     const ownerSummaries = Array.from(ownerMap.values()).sort((a, b) => b.total - a.total);
-    const sortedEntries = [...capitals].sort((a, b) => b.date.localeCompare(a.date));
 
     return {
       totalCapital: Math.round(totalCapital),
       periodCapital: Math.round(periodCapital),
       ownerSummaries,
-      sortedEntries,
     };
   }, [capitals, startDate, endDate]);
 
@@ -754,6 +754,35 @@ function MasterReportsContent() {
       netReceivable
     };
   }, [customers, suppliers]);
+
+  // FINANCIAL POSITION (ASSETS, LIABILITIES & CLOSING EQUITY)
+  const financialPosition = useMemo(() => {
+    const totalBankBalance = Math.round(banks.reduce((sum, b) => sum + (b.balance || 0), 0));
+    const cashInHand = Math.round(totalCash || 0);
+    const stockValue = Math.round(inventoryMetrics.totalStockCost || 0);
+    const customerReceivable = Math.round(duesMetrics.totalCustomerDue || 0);
+    const totalAssets = cashInHand + totalBankBalance + stockValue + customerReceivable;
+
+    const supplierPayable = Math.round(duesMetrics.totalSupplierDue || 0);
+    const customerAdvance = Math.round(duesMetrics.totalCustomerAdvance || 0);
+    const totalLiabilities = supplierPayable + customerAdvance;
+
+    const netWorth = totalAssets - totalLiabilities;
+    const closingEquity = capitalMetrics.totalCapital + pnlMetrics.netProfit;
+
+    return {
+      cashInHand,
+      totalBankBalance,
+      stockValue,
+      customerReceivable,
+      totalAssets,
+      supplierPayable,
+      customerAdvance,
+      totalLiabilities,
+      netWorth,
+      closingEquity,
+    };
+  }, [banks, totalCash, inventoryMetrics, duesMetrics, capitalMetrics, pnlMetrics]);
 
   // Filtered Customers & Suppliers for Due tables
   const filteredDueCustomers = useMemo(() => {
@@ -1664,21 +1693,55 @@ function MasterReportsContent() {
             {/* 4. PROFIT & LOSS / INCOME STATEMENT */}
             {/* ------------------------------------------------------------- */}
             {activeTab === 'profit_loss' && (
-              <div className="space-y-6">
-                
+              <div className="space-y-6 max-w-4xl mx-auto">
+
+                {/* Top 4 Executive KPI Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                    <span className="text-[11px] font-bold text-slate-500 block">নিট বিক্রয় আয়</span>
+                    <span className="text-lg font-black text-slate-900 font-mono block mt-1">৳ {formatBnNum(pnlMetrics.grossRevenue)}</span>
+                    <span className="text-[10px] text-slate-400 font-bold block mt-1">নির্বাচিত হিসাবকাল</span>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-emerald-200 bg-emerald-50/30 shadow-xs">
+                    <span className="text-[11px] font-bold text-emerald-800 block">মোট লাভ (Gross Profit)</span>
+                    <span className="text-lg font-black text-emerald-700 font-mono block mt-1">৳ {formatBnNum(pnlMetrics.grossProfit)}</span>
+                    <span className="text-[10px] text-emerald-600 font-bold block mt-1">গ্রস মার্জিন: {toBengaliDigits(pnlMetrics.grossMargin)}%</span>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-rose-200 bg-rose-50/30 shadow-xs">
+                    <span className="text-[11px] font-bold text-rose-800 block">পরিচালন ব্যয়</span>
+                    <span className="text-lg font-black text-rose-700 font-mono block mt-1">৳ {formatBnNum(pnlMetrics.operatingExpenses)}</span>
+                    <span className="text-[10px] text-rose-600 font-bold block mt-1">{toBengaliDigits(expenseByCategory.length)} টি খাত</span>
+                  </div>
+                  <div className={cn(
+                    "p-4 rounded-xl border shadow-xs",
+                    pnlMetrics.netProfit >= 0 ? "border-teal-200 bg-teal-50/40" : "border-rose-300 bg-rose-50/60"
+                  )}>
+                    <span className={cn("text-[11px] font-bold block", pnlMetrics.netProfit >= 0 ? "text-teal-800" : "text-rose-800")}>
+                      নিট লাভ / লোকসান
+                    </span>
+                    <span className={cn("text-lg font-black font-mono block mt-1", pnlMetrics.netProfit >= 0 ? "text-teal-700" : "text-rose-700")}>
+                      {pnlMetrics.netProfit >= 0 ? '+' : ''}৳ {formatBnNum(pnlMetrics.netProfit)}
+                    </span>
+                    <span className={cn("text-[10px] font-bold block mt-1", pnlMetrics.netProfit >= 0 ? "text-teal-600" : "text-rose-600")}>
+                      নিট মার্জিন: {toBengaliDigits(pnlMetrics.netMargin)}%
+                    </span>
+                  </div>
+                </div>
+
                 {/* Official Income Statement Document */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 md:p-8 max-w-4xl mx-auto space-y-6">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 md:p-8 space-y-6">
                   
                   {/* Title & Period */}
                   <div className="text-center pb-4 border-b border-slate-200 space-y-1">
-                    <h2 className="text-xl font-black text-slate-900">ব্যবসায়িক আয় বিবরণী (Income Statement)</h2>
-                    <p className="text-xs text-slate-500 font-bold">
-                      হিসাবকাল: {formatBnDate(startDate)} হতে {formatBnDate(endDate)}
+                    <p className="text-xs font-black text-[#8c6b1c] uppercase tracking-wider">{shopName}</p>
+                    <h2 className="text-xl font-black text-slate-900">ব্যবসায়িক আয় বিবরণী ও আর্থিক সারসংক্ষেপ</h2>
+                    <p className="text-[11px] text-slate-500 font-bold">
+                      Income Statement &amp; Owner&apos;s Equity &bull; হিসাবকাল: {formatBnDate(startDate)} হতে {formatBnDate(endDate)}
                     </p>
                   </div>
 
                   {/* Section 1: Revenue */}
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200 font-black text-xs text-slate-800">
                       <span>১. পরিচালন আয় (Operating Revenue)</span>
                       <span>পরিমাণ (৳)</span>
@@ -1687,14 +1750,14 @@ function MasterReportsContent() {
                       <span>মোট পণ্য বিক্রয় আয় (Gross Sales Revenue)</span>
                       <span className="font-mono font-bold">৳ {formatBnNum(pnlMetrics.grossRevenue)}</span>
                     </div>
-                    <div className="pl-4 pr-3 flex justify-between items-center text-xs font-black text-slate-900 pt-1 border-t border-slate-100">
+                    <div className="pl-4 pr-3 flex justify-between items-center text-xs font-black text-slate-900 pt-1.5 border-t border-slate-100">
                       <span>নিট পরিচালন আয় (Net Revenue)</span>
                       <span className="font-mono text-sm">৳ {formatBnNum(pnlMetrics.grossRevenue)}</span>
                     </div>
                   </div>
 
                   {/* Section 2: Cost of Goods Sold */}
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200 font-black text-xs text-slate-800">
                       <span>২. বিক্রিত পণ্যের ব্যয় (Cost of Goods Sold - COGS)</span>
                       <span>পরিমাণ (৳)</span>
@@ -1709,7 +1772,7 @@ function MasterReportsContent() {
                   <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 flex justify-between items-center">
                     <div>
                       <span className="font-black text-emerald-950 text-sm block">৩. মোট ব্যবসায়িক লাভ (Gross Profit)</span>
-                      <span className="text-[11px] text-emerald-700 font-semibold">আয় হতে পণ্যের ক্রয়মূল্য বাদে (মার্জিন: {pnlMetrics.grossMargin}%)</span>
+                      <span className="text-[11px] text-emerald-700 font-semibold">বিক্রয় আয় হতে পণ্যের ক্রয়মূল্য বাদে (মার্জিন: {toBengaliDigits(pnlMetrics.grossMargin)}%)</span>
                     </div>
                     <span className="text-xl font-black text-emerald-700 font-mono">
                       ৳ {formatBnNum(pnlMetrics.grossProfit)}
@@ -1717,7 +1780,7 @@ function MasterReportsContent() {
                   </div>
 
                   {/* Section 4: Operating Expenses */}
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200 font-black text-xs text-slate-800">
                       <span>৪. পরিচালন ব্যয়সমূহ (Operating Expenses)</span>
                       <span>পরিমাণ (৳)</span>
@@ -1732,7 +1795,7 @@ function MasterReportsContent() {
                         </div>
                       ))
                     )}
-                    <div className="pl-4 pr-3 flex justify-between items-center text-xs font-black text-rose-700 pt-1 border-t border-slate-100">
+                    <div className="pl-4 pr-3 flex justify-between items-center text-xs font-black text-rose-700 pt-1.5 border-t border-slate-100">
                       <span>মোট পরিচালন ব্যয় (Total Operating Expenses)</span>
                       <span className="font-mono text-sm">- ৳ {formatBnNum(pnlMetrics.operatingExpenses)}</span>
                     </div>
@@ -1745,7 +1808,7 @@ function MasterReportsContent() {
                   )}>
                     <div>
                       <span className="font-black text-base block">৫. নিট ব্যবসায়িক লাভ / লোকসান (Net Profit/Loss)</span>
-                      <span className="text-xs opacity-90 font-medium">গ্রস প্রফিট হতে সকল পরিচালন খরচ বাদ দেওয়ার পর (নিট মার্জিন: {pnlMetrics.netMargin}%)</span>
+                      <span className="text-xs opacity-90 font-medium">গ্রস প্রফিট হতে সকল পরিচালন খরচ বাদ দেওয়ার পর (নিট মার্জিন: {toBengaliDigits(pnlMetrics.netMargin)}%)</span>
                     </div>
                     <div className="text-right">
                       <span className="text-2xl font-black font-mono block">
@@ -1757,86 +1820,114 @@ function MasterReportsContent() {
                     </div>
                   </div>
 
-                  {/* Section 6: Business Capital / Muldhon (from টাকা যোগ) */}
-                  <div className="space-y-4 pt-4 border-t border-slate-200">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-indigo-50/80 p-3.5 rounded-xl border border-indigo-200">
-                      <div>
-                        <span className="font-black text-indigo-950 text-sm block">৬. ব্যবসায়িক মূলধন ও অংশীদার বিবরণ (Capital)</span>
-                        <span className="text-[11px] text-indigo-700 font-semibold">লেনদেন &rarr; &ldquo;টাকা যোগ&rdquo; থেকে যুক্ত সকল মূলধনের হিসাব</span>
+                  {/* Section 6: Owner's Capital & Equity Reconciliation */}
+                  <div className="space-y-3.5 pt-4 border-t border-slate-200">
+                    <div className="flex justify-between items-center bg-indigo-50/80 p-3 rounded-lg border border-indigo-200 font-black text-xs text-indigo-950">
+                      <span>৬. মূলধন ও মালিকানা স্বত্ব সমন্বয় (Capital &amp; Owner&apos;s Equity)</span>
+                      <span>পরিমাণ (৳)</span>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      <div className="pl-4 pr-3 flex justify-between items-center text-slate-700">
+                        <span>মোট জমাকৃত মূলধন (টাকা যোগ থেকে)</span>
+                        <span className="font-mono font-bold text-slate-900">৳ {formatBnNum(capitalMetrics.totalCapital)}</span>
                       </div>
-                      <div className="text-left sm:text-right">
-                        <span className="text-[10px] font-bold text-indigo-600 block">মোট মূলধন (সর্বমোট)</span>
-                        <span className="text-xl font-black text-indigo-800 font-mono">৳ {formatBnNum(capitalMetrics.totalCapital)}</span>
-                        {capitalMetrics.periodCapital !== capitalMetrics.totalCapital && (
-                          <span className="text-[10px] font-bold text-indigo-600 block">
-                            নির্বাচিত সময়ে যোগ: ৳ {formatBnNum(capitalMetrics.periodCapital)}
-                          </span>
-                        )}
+                      <div className="pl-4 pr-3 flex justify-between items-center text-slate-700">
+                        <span>{pnlMetrics.netProfit >= 0 ? '(+) নির্বাচিত হিসাবকালের নিট লাভ' : '(-) নির্বাচিত হিসাবকালের নিট লোকসান'}</span>
+                        <span className={cn("font-mono font-bold", pnlMetrics.netProfit >= 0 ? "text-emerald-700" : "text-rose-700")}>
+                          {pnlMetrics.netProfit >= 0 ? '+' : ''}৳ {formatBnNum(pnlMetrics.netProfit)}
+                        </span>
+                      </div>
+                      <div className="pl-4 pr-3 py-2.5 rounded-lg bg-indigo-50/60 border border-indigo-100 flex justify-between items-center font-black text-indigo-950">
+                        <span>সমন্বিত সমাপনী মূলধন (Closing Owner&apos;s Equity)</span>
+                        <span className="font-mono text-base text-indigo-800">৳ {formatBnNum(financialPosition.closingEquity)}</span>
                       </div>
                     </div>
 
                     {/* Owner-wise Capital Summary (কার কত মূলধন) */}
-                    {capitalMetrics.ownerSummaries.length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="text-xs font-black text-slate-700">কার কত মূলধন (মালিক / অংশীদার ভিত্তিক)</h4>
+                    {capitalMetrics.ownerSummaries.length === 0 ? (
+                      <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400 font-medium">
+                        কোনো মূলধন পাওয়া যায়নি। লেনদেন পেজের &ldquo;টাকা যোগ&rdquo; বাটন থেকে মূলধন যোগ করুন।
+                      </div>
+                    ) : (
+                      <div className="space-y-2 pt-1">
+                        <h4 className="text-xs font-black text-slate-700">কার কত মূলধন (অংশীদার ভিত্তিক)</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {capitalMetrics.ownerSummaries.map((owner, idx) => (
-                            <div key={idx} className="p-3.5 rounded-xl border border-indigo-100 bg-indigo-50/30 flex items-center justify-between">
-                              <div>
-                                <span className="font-black text-slate-900 text-xs block">{owner.ownerName}</span>
-                                <span className="text-[10px] text-slate-500 font-bold">{toBengaliDigits(owner.count)} বার জমা</span>
+                          {capitalMetrics.ownerSummaries.map((owner, idx) => {
+                            const sharePct = capitalMetrics.totalCapital > 0
+                              ? Math.round((owner.total / capitalMetrics.totalCapital) * 1000) / 10
+                              : 0;
+                            return (
+                              <div key={idx} className="p-3.5 rounded-xl border border-indigo-100 bg-indigo-50/30 flex items-center justify-between">
+                                <div>
+                                  <span className="font-black text-slate-900 text-xs block">{owner.ownerName}</span>
+                                  <span className="text-[10px] text-indigo-600 font-bold">অংশীদারিত্ব: {toBengaliDigits(sharePct)}%</span>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-sm font-black text-indigo-700 font-mono block">৳ {formatBnNum(owner.total)}</span>
+                                  <span className="text-[10px] text-slate-400 font-bold">মোট মূলধন</span>
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <span className="text-sm font-black text-indigo-700 font-mono block">৳ {formatBnNum(owner.total)}</span>
-                                <span className="text-[10px] text-slate-400 font-bold">মোট মূলধন</span>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
+                  </div>
 
-                    {/* Detailed Capital Entries Table */}
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-black text-slate-700">বিস্তারিত মূলধন এন্ট্রি সমূহ ({toBengaliDigits(capitalMetrics.sortedEntries.length)} টি)</h4>
-                      {capitalMetrics.sortedEntries.length === 0 ? (
-                        <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400 font-medium">
-                          কোনো মূলধন এন্ট্রি পাওয়া যায়নি। লেনদেন পেজের &ldquo;টাকা যোগ&rdquo; বাটন থেকে মূলধন যোগ করুন।
+                  {/* Section 7: Assets & Liabilities Snapshot (Balance Sheet Position) */}
+                  <div className="space-y-3 pt-4 border-t border-slate-200">
+                    <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200 font-black text-xs text-slate-800">
+                      <span>৭. ব্যবসার বর্তমান সম্পদ ও দায়ের সারসংক্ষেপ (Financial Position)</span>
+                      <span>লাইভ স্থিতি</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Assets */}
+                      <div className="p-4 rounded-xl border border-emerald-200/80 bg-emerald-50/20 space-y-2.5 text-xs">
+                        <div className="font-black text-emerald-900 border-b border-emerald-100 pb-1.5">মোট সম্পদ (Assets)</div>
+                        <div className="flex justify-between text-slate-700">
+                          <span>হাতে নগদ (Cash in Hand)</span>
+                          <span className="font-mono font-bold">৳ {formatBnNum(financialPosition.cashInHand)}</span>
                         </div>
-                      ) : (
-                        <div className="overflow-x-auto rounded-xl border border-slate-200">
-                          <table className="w-full text-xs text-left">
-                            <thead className="bg-slate-50 text-slate-700 font-black border-b border-slate-200">
-                              <tr>
-                                <th className="py-2.5 px-3">তারিখ</th>
-                                <th className="py-2.5 px-3">মালিক / কার মূলধন</th>
-                                <th className="py-2.5 px-3">খাত</th>
-                                <th className="py-2.5 px-3">মাধ্যম</th>
-                                <th className="py-2.5 px-3">বিবরণ</th>
-                                <th className="py-2.5 px-3 text-right">পরিমাণ (৳)</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {capitalMetrics.sortedEntries.map((entry) => (
-                                <tr key={entry.id} className="hover:bg-slate-50/70">
-                                  <td className="py-2.5 px-3 font-mono text-slate-600 whitespace-nowrap">{formatBnDate(entry.date)}</td>
-                                  <td className="py-2.5 px-3 font-bold text-slate-900">{entry.ownerName}</td>
-                                  <td className="py-2.5 px-3 text-slate-600">{entry.category}</td>
-                                  <td className="py-2.5 px-3 text-slate-600">
-                                    {entry.paymentMethod === 'bank'
-                                      ? `ব্যাংক${entry.bankName ? ` (${entry.bankName})` : ''}`
-                                      : entry.paymentMethod === 'cheque'
-                                        ? 'চেক'
-                                        : 'নগদ (ক্যাশ)'}
-                                  </td>
-                                  <td className="py-2.5 px-3 text-slate-500">{entry.note || '—'}</td>
-                                  <td className="py-2.5 px-3 text-right font-mono font-black text-indigo-700">৳ {formatBnNum(entry.amount)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                        <div className="flex justify-between text-slate-700">
+                          <span>ব্যাংক ব্যালেন্স</span>
+                          <span className="font-mono font-bold">৳ {formatBnNum(financialPosition.totalBankBalance)}</span>
                         </div>
-                      )}
+                        <div className="flex justify-between text-slate-700">
+                          <span>বর্তমান স্টক মূল্য (ক্রয়মূল্যে)</span>
+                          <span className="font-mono font-bold">৳ {formatBnNum(financialPosition.stockValue)}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-700">
+                          <span>কাস্টমার বাকি পাওনা (Receivable)</span>
+                          <span className="font-mono font-bold">৳ {formatBnNum(financialPosition.customerReceivable)}</span>
+                        </div>
+                        <div className="flex justify-between font-black text-emerald-800 pt-1.5 border-t border-emerald-200">
+                          <span>মোট সম্পদ (Total Assets)</span>
+                          <span className="font-mono text-sm">৳ {formatBnNum(financialPosition.totalAssets)}</span>
+                        </div>
+                      </div>
+
+                      {/* Liabilities & Net Worth */}
+                      <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/40 space-y-2.5 text-xs">
+                        <div className="font-black text-slate-800 border-b border-slate-200 pb-1.5">মোট দায় ও নিট সম্পদ (Liabilities &amp; Net Worth)</div>
+                        <div className="flex justify-between text-slate-700">
+                          <span>সরবরাহকারী বাকি দেনা (Payable)</span>
+                          <span className="font-mono font-bold text-rose-700">৳ {formatBnNum(financialPosition.supplierPayable)}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-700">
+                          <span>কাস্টমার অগ্রিম জমা (Advance)</span>
+                          <span className="font-mono font-bold text-rose-700">৳ {formatBnNum(financialPosition.customerAdvance)}</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-rose-800 pt-1 border-t border-slate-200">
+                          <span>মোট দায় (Total Liabilities)</span>
+                          <span className="font-mono">৳ {formatBnNum(financialPosition.totalLiabilities)}</span>
+                        </div>
+                        <div className="flex justify-between font-black text-indigo-900 pt-2 border-t border-slate-300">
+                          <span>ব্যবসার নিট মূল্য (Assets − Liabilities)</span>
+                          <span className="font-mono text-sm text-indigo-700">৳ {formatBnNum(financialPosition.netWorth)}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
 

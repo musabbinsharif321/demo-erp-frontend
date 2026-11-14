@@ -727,7 +727,8 @@ function TransactionsContent() {
       return;
     }
 
-    const trimmedOwner = addMoneyOwnerName.trim();
+    const isCapitalCategory = addMoneyCategory.includes('মূলধন');
+    const trimmedOwner = isCapitalCategory ? addMoneyOwnerName.trim() : '';
     const metaJson = JSON.stringify({
       isAddMoney: true,
       category: 'টাকা যোগ',
@@ -2959,17 +2960,19 @@ function TransactionsContent() {
               </div>
 
               {/* Owner / Partner Name for Capital */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-600">
-                  মালিক / অংশীদারের নাম (কার মূলধন) {addMoneyCategory.includes('মূলধন') ? '' : '(ঐচ্ছিক)'}
-                </Label>
-                <Input
-                  placeholder="যেমন: মোঃ রহিম / পার্টনার ১"
-                  value={addMoneyOwnerName}
-                  onChange={e => setAddMoneyOwnerName(e.target.value)}
-                  className="rounded-xl h-11 bg-slate-50/50 border-slate-200 text-xs font-bold"
-                />
-              </div>
+              {addMoneyCategory.includes('মূলধন') && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-600">
+                    মালিক / অংশীদারের নাম (কার মূলধন)
+                  </Label>
+                  <Input
+                    placeholder="যেমন: মোঃ রহিম / পার্টনার ১"
+                    value={addMoneyOwnerName}
+                    onChange={e => setAddMoneyOwnerName(e.target.value)}
+                    className="rounded-xl h-11 bg-slate-50/50 border-slate-200 text-xs font-bold"
+                  />
+                </div>
+              )}
 
               {/* Amount */}
               <div className="space-y-1.5">

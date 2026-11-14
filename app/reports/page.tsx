@@ -425,12 +425,20 @@ function MasterReportsContent() {
 
         if (!isAddMoney) return;
 
-        const categoryLabel = meta.addMoneyCategory || 'টাকা যোগ';
+        const categoryLabel = String(meta.addMoneyCategory || '');
+        const isCapitalEntry =
+          categoryLabel.includes('মূলধন') ||
+          categoryLabel.toLowerCase().includes('owner capital') ||
+          rawNoteStr.includes('মালিকের মূলধন') ||
+          rawNoteStr.includes('Owner Capital');
+
+        if (!isCapitalEntry) return;
+
         const ownerName =
           (meta.ownerName && String(meta.ownerName).trim()) ||
           (t.party_name && String(t.party_name).trim()) ||
           (meta.partyName && String(meta.partyName).trim()) ||
-          categoryLabel;
+          'মালিকের মূলধন';
 
         const dateStr =
           meta.date ||

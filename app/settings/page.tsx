@@ -15,7 +15,7 @@ import {
   Shield, ShieldCheck, KeyRound, Edit2, Trash2, CheckCircle2, 
   Lock, Eye, EyeOff, User, Camera, Upload, Mail, Sparkles, Image as ImageIcon, ShieldAlert
 } from 'lucide-react';
-import { api, UserData } from '@/lib/api';
+import { api, UserData, PartyData } from '@/lib/api';
 import { useAuth } from '@/lib/authContext';
 import { useShopSettings } from '@/lib/shopSettingsContext';
 import { cn } from '@/lib/utils';
@@ -63,6 +63,73 @@ export default function SettingsPage() {
       toast.error(err?.message || 'দোকানের তথ্য সংরক্ষণ করা সম্ভব হয়নি');
     } finally {
       setIsSavingShop(false);
+    }
+  };
+
+  // 0.5 Partners Management State
+  const [partners, setPartners] = useState<PartyData[]>([]);
+  const [partnersLoading, setPartnersLoading] = useState(false);
+  const [partnerName, setPartnerName] = useState('');
+  const [partnerPhone, setPartnerPhone] = useState('');
+  const [isSavingPartner, setIsSavingPartner] = useState(false);
+
+  const loadPartners = useCallback(async () => {
+    if (!token) return;
+    try {
+      setPartnersLoading(true);
+      const list = await api.parties.list({ party_type: 'partner' });
+      setPartners(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.error('Error loading partners:', err);
+    } finally {
+      setPartnersLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadPartners();
+  }, [loadPartners]);
+
+  const handleAddPartner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = partnerName.trim();
+    const cleanPhone = toEnglishDigits(partnerPhone).trim();
+    if (!cleanName) {
+      toast.error('পার্টনারের নাম প্রদান করুন!');
+      return;
+    }
+    if (!cleanPhone) {
+      toast.error('পার্টনারের মোবাইল নম্বর প্রদান করুন!');
+      return;
+    }
+    try {
+      setIsSavingPartner(true);
+      await api.parties.create({
+        party_type: 'partner',
+        name: cleanName,
+        phone: cleanPhone,
+      });
+      toast.success('পার্টনার সফলভাবে যোগ করা হয়েছে!');
+      setPartnerName('');
+      setPartnerPhone('');
+      await loadPartners();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'পার্টনার যোগ করা সম্ভব হয়নি');
+    } finally {
+      setIsSavingPartner(false);
+    }
+  };
+
+  const handleDeletePartner = async (p: PartyData) => {
+    if (!p.id) return;
+    try {
+      await api.parties.delete(p.id);
+      toast.success(`"${p.name}" পার্টনার তালিকা থেকে মুছে ফেলা হয়েছে`);
+      await loadPartners();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('পার্টনার মুছে ফেলা সম্ভব হয়নি');
     }
   };
 
@@ -788,6 +855,106 @@ export default function SettingsPage() {
                   </Button>
                 </div>
               </form>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 1.5 PARTNER MANAGEMENT CARD */}
+        {isAdmin && (
+          <Card className="border-slate-200 shadow-sm rounded-3xl overflow-hidden bg-white">
+            <CardHeader className="bg-emerald-50/60 border-b border-emerald-100 py-4 px-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                <CardTitle className="flex items-center gap-2 text-base font-black text-slate-900">
+                  <Users className="w-5 h-5 text-emerald-600" />
+                  পার্টনার ম্যানেজমেন্ট (মূলধন অংশীদার)
+                </CardTitle>
+                <span className="text-[10px] font-mono font-bold bg-white text-emerald-900 px-2.5 py-0.5 rounded-full border border-emerald-300 self-start sm:self-auto">
+                  মোট পার্টনার: {partners.length} জন
+                </span>
+              </div>
+              <CardDescription className="text-xs text-slate-500 font-semibold mt-0.5">
+                টাকা যোগ ফর্মে &quot;মালিকের মূলধন যোগ&quot; সিলেক্ট করলে এখান থেকে যোগ করা পার্টনারদের তালিকা ড্রপডাউনে দেখাবে
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 space-y-5">
+              <form onSubmit={handleAddPartner} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                <div className="md:col-span-5 space-y-1.5">
+                  <Label className="font-bold text-xs text-slate-700">পার্টনারের নাম *</Label>
+                  <Input
+                    value={partnerName}
+                    onChange={(e) => setPartnerName(e.target.value)}
+                    placeholder="যেমন: মোঃ রহিম উদ্দিন"
+                    className="h-10 rounded-xl border-slate-200 font-semibold"
+                  />
+                </div>
+                <div className="md:col-span-4 space-y-1.5">
+                  <Label className="font-bold text-xs text-slate-700">মোবাইল নম্বর *</Label>
+                  <Input
+                    value={partnerPhone}
+                    onChange={(e) => setPartnerPhone(e.target.value)}
+                    placeholder="যেমন: 017XXXXXXXX"
+                    className="h-10 rounded-xl border-slate-200 font-semibold"
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <Button
+                    type="submit"
+                    disabled={isSavingPartner}
+                    className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl gap-1.5 cursor-pointer"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>{isSavingPartner ? 'যোগ হচ্ছে...' : 'পার্টনার যোগ করুন'}</span>
+                  </Button>
+                </div>
+              </form>
+
+              <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow className="text-xs">
+                      <TableHead className="font-black text-slate-600 w-12 text-center">#</TableHead>
+                      <TableHead className="font-black text-slate-600">পার্টনারের নাম</TableHead>
+                      <TableHead className="font-black text-slate-600">মোবাইল নম্বর</TableHead>
+                      <TableHead className="font-black text-slate-600 text-right w-24">অ্যাকশন</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {partnersLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-6 text-xs text-slate-400 font-semibold">
+                          পার্টনার তালিকা লোড হচ্ছে...
+                        </TableCell>
+                      </TableRow>
+                    ) : partners.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-6 text-xs text-slate-400 font-semibold">
+                          এখনো কোনো পার্টনার যোগ করা হয়নি। উপর থেকে নাম ও মোবাইল নম্বর দিয়ে যোগ করুন।
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      partners.map((p, idx) => (
+                        <TableRow key={p.id || idx} className="text-xs">
+                          <TableCell className="text-center font-bold text-slate-400">{idx + 1}</TableCell>
+                          <TableCell className="font-bold text-slate-900">{p.name}</TableCell>
+                          <TableCell className="font-mono font-semibold text-slate-600">{p.phone}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeletePartner(p)}
+                              className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg cursor-pointer"
+                              title="পার্টনার মুছুন"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         )}

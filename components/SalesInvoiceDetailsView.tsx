@@ -620,7 +620,7 @@ export const SalesInvoiceDetailsView: React.FC<SalesInvoiceDetailsViewProps> = (
                         <span>{cleanLegacyBengaliText(item.name)}</span> <span className="text-slate-500 text-[11px] font-normal">{bundleInfo}</span>
                       </td>
                       <td className="py-2.5 px-2 text-center text-slate-600">
-                        {item.brand || '—'}
+                        {item.brand || parsed.brandName || '—'}
                       </td>
                       <td className="py-2.5 px-2 text-center text-slate-600">
                         {item.variant || '—'}

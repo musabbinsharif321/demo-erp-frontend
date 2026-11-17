@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Shell } from '@/components/Shell';
 import { api, CustomerSiteData } from '@/lib/api';
 import { 
-  Search, Eye, Printer, X, FileText, Receipt, Banknote, AlertCircle, Plus, 
+  Search, Eye, EyeOff, Printer, X, FileText, Receipt, Banknote, AlertCircle, Plus, 
   ShoppingCart, User, Phone, Tag, CheckCircle2, DollarSign, Trash2, ArrowRight, ArrowLeft,
   Lightbulb, Calendar, Building, UserCheck, Percent, HelpCircle, Edit2, Filter, ChevronUp, ChevronDown, RotateCcw, Zap, ArrowUpDown, ChevronLeft, ChevronRight,
   MapPin, TrendingUp, TrendingDown
@@ -229,6 +229,7 @@ function InvoicesContent() {
 
   // Direct / Converted Invoice Creation Form States
   const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false);
+  const [showProfit, setShowProfit] = useState(false);
   const [convertedOrderId, setConvertedOrderId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
@@ -521,6 +522,7 @@ function InvoicesContent() {
           items: (s.items || []).map(i => ({
             id: String(i.product || ''),
             name: formatProductName(i.product_name),
+            brand: i.brand || '',
             price: i.price,
             buyPrice: Number(i.buy_price || 0),
             quantity: i.quantity,
@@ -2454,15 +2456,43 @@ function InvoicesContent() {
                 </div>
               </div>
 
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => { setIsCreateInvoiceOpen(false); resetCreateForm(); }}
-                className="h-9 w-9 rounded-md hover:bg-rose-50 hover:text-rose-600 text-slate-500 transition-colors"
-                title="বন্ধ করুন"
-              >
-                <X className="w-5 h-5" />
-              </Button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={showProfit}
+                  onClick={() => setShowProfit(prev => !prev)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold transition-all cursor-pointer select-none",
+                    showProfit
+                      ? "bg-emerald-50 border-emerald-300 text-emerald-800 shadow-xs"
+                      : "bg-slate-100 border-slate-300 text-slate-600 hover:bg-slate-200/70"
+                  )}
+                  title={showProfit ? "লাভ লুকান" : "লাভ দেখুন"}
+                >
+                  {showProfit ? <Eye className="w-3.5 h-3.5 text-emerald-600" /> : <EyeOff className="w-3.5 h-3.5 text-slate-500" />}
+                  <span>লাভ</span>
+                  <span className={cn(
+                    "w-7 h-4 rounded-full relative transition-colors inline-flex items-center",
+                    showProfit ? "bg-emerald-600" : "bg-slate-300"
+                  )}>
+                    <span className={cn(
+                      "w-3 h-3 rounded-full bg-white shadow-xs transition-transform",
+                      showProfit ? "translate-x-3.5" : "translate-x-0.5"
+                    )} />
+                  </span>
+                </button>
+
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => { setIsCreateInvoiceOpen(false); resetCreateForm(); }}
+                  className="h-9 w-9 rounded-md hover:bg-rose-50 hover:text-rose-600 text-slate-500 transition-colors"
+                  title="বন্ধ করুন"
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
             </div>
 
             {/* MAIN FORM GRID INSIDE FRAME */}
@@ -2857,7 +2887,7 @@ function InvoicesContent() {
                             <span>পণ্য নির্বাচন করুন <span className="text-rose-500">*</span></span>
                             {selectedInvoiceProduct && (
                               <div className="flex items-center gap-1.5">
-                                {selectedInvoiceProduct.buyPrice !== undefined && selectedInvoiceProduct.buyPrice > 0 && (
+                                {showProfit && selectedInvoiceProduct.buyPrice !== undefined && selectedInvoiceProduct.buyPrice > 0 && (
                                   <span className="text-[11px] font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-300">
                                     ক্রয়মূল্য: ৳{toBengaliDigits(selectedInvoiceProduct.buyPrice.toLocaleString('en-IN'))}
                                   </span>
@@ -2915,7 +2945,7 @@ function InvoicesContent() {
                         <div className="md:col-span-2 space-y-1.5">
                           <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
                             <span>বিক্রয় দর (৳)</span>
-                            {selectedInvoiceProduct?.buyPrice !== undefined && selectedInvoiceProduct.buyPrice > 0 && (
+                            {showProfit && selectedInvoiceProduct?.buyPrice !== undefined && selectedInvoiceProduct.buyPrice > 0 && (
                               <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-mono" title="এই পণ্যের ক্রয়মূল্য">
                                 ক্রয়: ৳{toBengaliDigits(selectedInvoiceProduct.buyPrice.toLocaleString('en-IN'))}
                               </span>
@@ -2943,7 +2973,7 @@ function InvoicesContent() {
                           <Label className="text-xs font-bold text-slate-500">মোট (৳)</Label>
                           <div className="h-10 bg-slate-100 border border-slate-200 rounded-md flex flex-col items-center justify-center font-black text-slate-800 text-xs px-1 overflow-hidden leading-tight">
                             <span>৳{toBengaliDigits(Math.round((itemQty * itemPrice) * 100) / 100 || 0)}</span>
-                            {selectedInvoiceProduct?.buyPrice !== undefined && selectedInvoiceProduct.buyPrice > 0 && itemPrice > 0 && (
+                            {showProfit && selectedInvoiceProduct?.buyPrice !== undefined && selectedInvoiceProduct.buyPrice > 0 && itemPrice > 0 && (
                               <span className={cn(
                                 "text-[10px] font-mono font-bold",
                                 (itemPrice - selectedInvoiceProduct.buyPrice) >= 0 ? "text-emerald-600" : "text-rose-600"
@@ -2987,14 +3017,14 @@ function InvoicesContent() {
                             <TableHead className="text-center font-black">পরিমাণ</TableHead>
                             <TableHead className="text-right font-black">একক মূল্য</TableHead>
                             <TableHead className="text-right font-black">মোট মূল্য</TableHead>
-                            <TableHead className="text-right font-black">লাভ (Profit)</TableHead>
+                            {showProfit && <TableHead className="text-right font-black">লাভ (Profit)</TableHead>}
                             <TableHead className="w-10 text-center font-black">🗑️</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {cart.length === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={9} className="text-center py-8 text-xs text-slate-400 font-semibold">
+                              <TableCell colSpan={showProfit ? 9 : 8} className="text-center py-8 text-xs text-slate-400 font-semibold">
                                 কার্ট খালি। উপর থেকে পণ্য নির্বাচন করে যোগ করুন।
                               </TableCell>
                             </TableRow>
@@ -3015,7 +3045,7 @@ function InvoicesContent() {
                                 </TableCell>
                                 <TableCell className="text-right font-medium text-slate-600">৳{toBengaliDigits((item.price || 0).toLocaleString('en-IN'))}</TableCell>
                                 <TableCell className="text-right font-black text-slate-900">৳{toBengaliDigits(((item.price || 0) * item.quantity).toLocaleString('en-IN'))}</TableCell>
-                                {(() => {
+                                {showProfit && (() => {
                                   const itemCost = item.buyPrice !== undefined && item.buyPrice > 0
                                     ? item.buyPrice 
                                     : (products.find(p => String(p.id) === String(item.id) || p.name === item.name)?.buyPrice || 0);
@@ -4053,48 +4083,50 @@ function InvoicesContent() {
                       </div>
 
                       {/* Real-time Estimated Profit Box */}
-                      <div className="pt-3 border-t border-dashed border-slate-200">
-                        <div className={cn(
-                          "p-3 rounded-lg border flex items-center justify-between transition-all",
-                          cartEstimatedProfit >= 0 
-                            ? "bg-gradient-to-r from-emerald-50 to-teal-50/60 border-emerald-200 text-emerald-950" 
-                            : "bg-rose-50 border-rose-200 text-rose-950"
-                        )}>
-                          <div className="flex items-center gap-2.5">
-                            <div className={cn(
-                              "w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-xs",
-                              cartEstimatedProfit >= 0 ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
-                            )}>
-                              {cartEstimatedProfit >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                            </div>
-                            <div>
-                              <div className="text-xs font-black flex items-center gap-1.5">
-                                <span>চালানের আনুমানিক নিট লাভ</span>
-                                <span className={cn(
-                                  "text-[10px] px-1.5 py-0.5 rounded-full font-bold",
-                                  cartEstimatedProfit >= 0 ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
-                                )}>
-                                  {toBengaliDigits(cartProfitMargin)}% মার্জিন
-                                </span>
+                      {showProfit && (
+                        <div className="pt-3 border-t border-dashed border-slate-200">
+                          <div className={cn(
+                            "p-3 rounded-lg border flex items-center justify-between transition-all",
+                            cartEstimatedProfit >= 0 
+                              ? "bg-gradient-to-r from-emerald-50 to-teal-50/60 border-emerald-200 text-emerald-950" 
+                              : "bg-rose-50 border-rose-200 text-rose-950"
+                          )}>
+                            <div className="flex items-center gap-2.5">
+                              <div className={cn(
+                                "w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-xs",
+                                cartEstimatedProfit >= 0 ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
+                              )}>
+                                {cartEstimatedProfit >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                               </div>
-                              <div className="text-[10px] text-slate-500 font-medium">
-                                নিট বিক্রয়: ৳{toBengaliDigits(cartNetRevenue.toLocaleString('en-IN'))} | মোট ক্রয়মূল্য: ৳{toBengaliDigits(cartCostTotal.toLocaleString('en-IN'))}
+                              <div>
+                                <div className="text-xs font-black flex items-center gap-1.5">
+                                  <span>চালানের আনুমানিক নিট লাভ</span>
+                                  <span className={cn(
+                                    "text-[10px] px-1.5 py-0.5 rounded-full font-bold",
+                                    cartEstimatedProfit >= 0 ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                                  )}>
+                                    {toBengaliDigits(cartProfitMargin)}% মার্জিন
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-slate-500 font-medium">
+                                  নিট বিক্রয়: ৳{toBengaliDigits(cartNetRevenue.toLocaleString('en-IN'))} | মোট ক্রয়মূল্য: ৳{toBengaliDigits(cartCostTotal.toLocaleString('en-IN'))}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <div className="text-right">
-                            <span className={cn(
-                              "text-lg font-black block font-mono",
-                              cartEstimatedProfit >= 0 ? "text-emerald-700" : "text-rose-700"
-                            )}>
-                              {cartEstimatedProfit >= 0 ? '+' : ''}৳ {toBengaliDigits(cartEstimatedProfit.toLocaleString('en-IN'))}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-bold block">
-                              {cartCostTotal > 0 ? 'লাইভ হিসাবকৃত' : 'ক্রয়মূল্য অন্তর্ভুক্ত করুন'}
-                            </span>
+                            <div className="text-right">
+                              <span className={cn(
+                                "text-lg font-black block font-mono",
+                                cartEstimatedProfit >= 0 ? "text-emerald-700" : "text-rose-700"
+                              )}>
+                                {cartEstimatedProfit >= 0 ? '+' : ''}৳ {toBengaliDigits(cartEstimatedProfit.toLocaleString('en-IN'))}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-bold block">
+                                {cartCostTotal > 0 ? 'লাইভ হিসাবকৃত' : 'ক্রয়মূল্য অন্তর্ভুক্ত করুন'}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

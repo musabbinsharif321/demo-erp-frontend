@@ -6,8 +6,9 @@ import { bn } from 'date-fns/locale';
 import { 
   ArrowLeft, Printer, Download, Mail, Edit, 
   Receipt, User, CreditCard, FileText, Trash2, 
-  ArrowUpRight, ArrowDownRight, Landmark, Wallet, CheckCircle2, HandCoins
+  ArrowUpRight, ArrowDownRight, Landmark, Wallet, CheckCircle2, HandCoins, Eye, Paperclip
 } from 'lucide-react';
+import { API_BASE_URL } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toBengaliDigits, numberToBengaliWords } from '@/lib/bengaliUtils';
@@ -526,6 +527,57 @@ export const PaymentVoucherDetailsView: React.FC<PaymentVoucherDetailsViewProps>
                     {userNote || '—'}
                   </p>
                 </div>
+
+                {(() => {
+                  const rawAttachment = voucher.attachment || voucher.raw?.attachment;
+                  if (!rawAttachment || typeof rawAttachment !== 'string') return null;
+                  const baseOrigin = API_BASE_URL ? API_BASE_URL.replace(/\/api\/?$/, '') : '';
+                  const attachmentUrl = rawAttachment.startsWith('/') ? `${baseOrigin}${rawAttachment}` : rawAttachment;
+                  const fileName = decodeURIComponent(attachmentUrl.split('/').pop() || 'সংযুক্ত ফাইল');
+                  const isImage = /\.(jpe?g|png|webp|gif)(\?.*)?$/i.test(attachmentUrl);
+
+                  return (
+                    <div className="pt-2 border-t border-slate-100 space-y-2">
+                      <span className="text-slate-500 flex items-center gap-1.5 font-bold">
+                        <Paperclip className="w-3.5 h-3.5 text-blue-600" />
+                        সংযুক্ত ফাইল:
+                      </span>
+                      <div className="p-3 rounded-lg border border-blue-200 bg-blue-50/40 space-y-2.5">
+                        {isImage && (
+                          <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="block">
+                            <img
+                              src={attachmentUrl}
+                              alt={fileName}
+                              className="max-h-48 rounded-md border border-slate-200 object-contain bg-white"
+                            />
+                          </a>
+                        )}
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-slate-800 truncate max-w-[220px]" title={fileName}>
+                            {fileName}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={attachmentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold transition-colors"
+                            >
+                              <Eye className="w-3 h-3" /> দেখুন
+                            </a>
+                            <a
+                              href={attachmentUrl}
+                              download={fileName}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-[11px] font-bold transition-colors"
+                            >
+                              <Download className="w-3 h-3" /> ডাউনলোড
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 

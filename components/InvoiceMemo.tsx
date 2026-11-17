@@ -593,7 +593,7 @@ export const InvoiceMemo: React.FC<InvoiceMemoProps> = ({
                       <td className="border border-slate-300 py-1.5 px-2 text-left font-bold">
                         <span>{cleanLegacyBengaliText(item.name)}</span> <span className="text-slate-500 text-[11px] font-normal">{bundleInfo}</span>
                       </td>
-                      <td className="border border-slate-300 py-1.5 px-2 text-center">{item.brand || '—'}</td>
+                      <td className="border border-slate-300 py-1.5 px-2 text-center">{item.brand || parsed.brandName || '—'}</td>
                       <td className="border border-slate-300 py-1.5 px-2 text-center">{item.variant || '—'}</td>
                       <td className="border border-slate-300 py-1.5 px-2 text-center font-mono font-bold">{toBengaliDigits(itemQty.toLocaleString('en-IN'))}</td>
                       <td className="border border-slate-300 py-1.5 px-2 text-center">{isRing ? 'কেজি' : (item.unit || 'পিস')}</td>

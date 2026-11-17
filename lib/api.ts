@@ -33,7 +33,7 @@ export interface CustomerSiteData {
 
 export interface PartyData {
   id?: string | number;
-  party_type: 'customer' | 'supplier' | 'engineer' | 'both';
+  party_type: 'customer' | 'supplier' | 'engineer' | 'partner' | 'both';
   name: string;
   business_name?: string;
   customer_type?: string;
@@ -124,6 +124,7 @@ export interface TransactionItemData {
   id?: number;
   product?: number | null;
   product_name: string;
+  brand?: string;
   quantity: number;
   price: number;
   buy_price?: number;
@@ -159,6 +160,7 @@ export interface TransactionData {
   cheque_due_date?: string;
   cheque_status?: 'pending' | 'cleared' | 'bounced';
   notes?: string;
+  attachment?: string | File | null;
   created_at?: string;
   items?: TransactionItemData[];
 }
@@ -254,11 +256,12 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     authHeaders['Authorization'] = `Token ${token.trim()}`;
   }
 
-  const headers = {
-    'Content-Type': 'application/json',
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const headers: Record<string, string> = {
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     'Accept': 'application/json',
     ...authHeaders,
-    ...(options.headers || {}),
+    ...((options.headers as Record<string, string>) || {}),
   };
 
   try {
@@ -344,7 +347,7 @@ export const api = {
 
   // Parties (Customers, Suppliers & Engineers)
   parties: {
-    list: async (params?: { party_type?: 'customer' | 'supplier' | 'engineer' | 'both'; search?: string }): Promise<PartyData[]> => {
+    list: async (params?: { party_type?: 'customer' | 'supplier' | 'engineer' | 'partner' | 'both'; search?: string }): Promise<PartyData[]> => {
       try {
         const query = new URLSearchParams();
         if (params?.party_type) query.append('party_type', params.party_type);
@@ -568,16 +571,16 @@ export const api = {
         }))
       };
     },
-    create: async (data: TransactionData): Promise<TransactionData> => {
+    create: async (data: TransactionData | FormData): Promise<TransactionData> => {
       return request<TransactionData>('/transactions/', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: data instanceof FormData ? data : JSON.stringify(data),
       });
     },
-    update: async (id: string | number, data: Partial<TransactionData>): Promise<TransactionData> => {
+    update: async (id: string | number, data: Partial<TransactionData> | FormData): Promise<TransactionData> => {
       return request<TransactionData>(`/transactions/${id}/`, {
         method: 'PATCH',
-        body: JSON.stringify(data),
+        body: data instanceof FormData ? data : JSON.stringify(data),
       });
     },
     approve: async (id: string | number): Promise<TransactionData> => {

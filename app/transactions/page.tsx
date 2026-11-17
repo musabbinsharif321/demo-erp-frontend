@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Shell } from '@/components/Shell';
 import { api } from '@/lib/api';
@@ -203,6 +203,7 @@ function TransactionsContent() {
   const [isAddBankOpen, setIsAddBankOpen] = useState(false);
 
   // Add Money (টাকা যোগ) State
+  const [partners, setPartners] = useState<{ id: string; name: string; phone: string }[]>([]);
   const [addMoneyCategory, setAddMoneyCategory] = useState('ক্যাশে জমা (Add Cash)');
   const [addMoneyOwnerName, setAddMoneyOwnerName] = useState<string>('');
   const [addMoneyAmount, setAddMoneyAmount] = useState<number>(0);
@@ -261,6 +262,11 @@ function TransactionsContent() {
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [referenceNo, setReferenceNo] = useState<string>('');
   const [paymentNote, setPaymentNote] = useState<string>('');
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [existingAttachmentUrl, setExistingAttachmentUrl] = useState<string>('');
+  const [removeExistingAttachment, setRemoveExistingAttachment] = useState<boolean>(false);
+  const [isDraggingAttachment, setIsDraggingAttachment] = useState<boolean>(false);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   // Bank & Cheque Detailed States (Exact replica of Invoice Register Payment)
   const [selectedShopBank, setSelectedShopBank] = useState<string>('');
@@ -310,6 +316,16 @@ function TransactionsContent() {
         accNo: b.account_number || b.accNo || '',
         balance: Number(b.balance || b.current_balance || 0)
       })));
+
+      setPartners(
+        safePartyList
+          .filter((p: any) => p.party_type === 'partner')
+          .map((p: any) => ({
+            id: String(p.id),
+            name: p.name || '',
+            phone: p.phone || ''
+          }))
+      );
 
       // Party Lookups
       const partyMapById = new Map<string, any>();
@@ -645,6 +661,9 @@ function TransactionsContent() {
     setDiscountAmount(0);
     setReferenceNo(`REF-${Math.floor(100 + Math.random() * 900)}`);
     setPaymentNote('');
+    setAttachmentFile(null);
+    setExistingAttachmentUrl('');
+    setRemoveExistingAttachment(false);
     if (type === 'income') {
       const defaultBank = availableBankOptions[0]?.value || '';
       setSelectedShopBank(defaultBank);
@@ -718,6 +737,9 @@ function TransactionsContent() {
     setChequeNo(t.chequeNo || '');
     setChequeDate(t.chequeDate || '');
     setTransactionRef(t.transactionRef || '');
+    setAttachmentFile(null);
+    setExistingAttachmentUrl(t.raw?.attachment || '');
+    setRemoveExistingAttachment(false);
     setIsAddOpen(true);
   };
 
@@ -729,11 +751,19 @@ function TransactionsContent() {
 
     const isCapitalCategory = addMoneyCategory.includes('মূলধন');
     const trimmedOwner = isCapitalCategory ? addMoneyOwnerName.trim() : '';
+    if (isCapitalCategory && !trimmedOwner) {
+      toast.error('অনুগ্রহ করে পার্টনার নির্বাচন করুন');
+      return;
+    }
+    const matchedPartner = isCapitalCategory
+      ? partners.find((p) => p.name === trimmedOwner)
+      : undefined;
     const metaJson = JSON.stringify({
       isAddMoney: true,
       category: 'টাকা যোগ',
       addMoneyCategory: addMoneyCategory,
       ownerName: trimmedOwner || '',
+      partnerId: matchedPartner?.id || '',
       partyName: trimmedOwner || addMoneyCategory,
       date: addMoneyDate,
       userNote: addMoneyNote || ''
@@ -741,6 +771,7 @@ function TransactionsContent() {
 
     try {
       await api.transactions.create({
+        party: matchedPartner ? Number(matchedPartner.id) : undefined,
         party_name: trimmedOwner || addMoneyCategory,
         transaction_type: 'payment_in',
         total_amount: addMoneyAmount,
@@ -1170,14 +1201,33 @@ function TransactionsContent() {
         payload.cheque_status = 'pending';
       }
 
+      let requestBody: any = payload;
+      if (attachmentFile || removeExistingAttachment) {
+        const formData = new FormData();
+        Object.entries(payload).forEach(([key, val]) => {
+          if (val !== undefined && val !== null) {
+            formData.append(key, String(val));
+          }
+        });
+        if (attachmentFile) {
+          formData.append('attachment', attachmentFile);
+        } else if (removeExistingAttachment) {
+          formData.append('attachment', '');
+        }
+        requestBody = formData;
+      }
+
       if (editingTransactionId) {
-        await api.transactions.update(editingTransactionId, payload);
+        await api.transactions.update(editingTransactionId, requestBody);
         toast.success('পেমেন্ট সফলভাবে আপডেট করা হয়েছে');
       } else {
-        await api.transactions.create(payload);
+        await api.transactions.create(requestBody);
         toast.success('পেমেন্ট সফলভাবে সংরক্ষণ করা হয়েছে');
       }
 
+      setAttachmentFile(null);
+      setExistingAttachmentUrl('');
+      setRemoveExistingAttachment(false);
       setEditingTransactionId(null);
       setIsAddTxnOpen(false);
       setIsAddOpen(false);
@@ -1792,8 +1842,22 @@ function TransactionsContent() {
                                 {isLoanIn ? '+' : isIncome ? '+' : isExpense ? '-' : '+'} ৳ {toBengaliDigits((t.amount || 0).toLocaleString('bn-BD'))}
                               </span>
                             </TableCell>
-                            <TableCell className="font-mono text-slate-500 max-w-[150px] truncate" title={t.referenceNo || t.description}>
-                              {toBengaliDigits(t.referenceNo || t.description || '—')}
+                            <TableCell className="font-mono text-slate-500 max-w-[180px]" title={t.referenceNo || t.description}>
+                              <div className="flex items-center gap-1.5">
+                                <span className="truncate">{toBengaliDigits(t.referenceNo || t.description || '—')}</span>
+                                {t.raw?.attachment && (
+                                  <a
+                                    href={t.raw.attachment}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bengali font-bold hover:bg-blue-100 shrink-0"
+                                    title="সংযুক্ত ফাইল দেখুন"
+                                  >
+                                    <FileText className="w-3 h-3" /> ফাইল
+                                  </a>
+                                )}
+                              </div>
                             </TableCell>
                             
                             {/* 3-DOT ACTION MENU BUTTON */}
@@ -2720,12 +2784,134 @@ function TransactionsContent() {
                           সংযুক্তি (ঐচ্ছিক)
                         </Label>
 
+                        <input
+                          ref={attachmentInputRef}
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null;
+                            if (file) {
+                              const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+                              const extOk = /\.(jpe?g|png|webp|pdf)$/i.test(file.name);
+                              if (!allowedTypes.includes(file.type) && !extOk) {
+                                toast.error('শুধুমাত্র JPG, PNG, WEBP বা PDF ফাইল আপলোড করা যাবে');
+                                e.target.value = '';
+                                return;
+                              }
+                              if (file.size > 5 * 1024 * 1024) {
+                                toast.error('ফাইলের সাইজ সর্বোচ্চ 5MB হতে পারবে');
+                                e.target.value = '';
+                                return;
+                              }
+                              setAttachmentFile(file);
+                              setRemoveExistingAttachment(false);
+                            }
+                            e.target.value = '';
+                          }}
+                        />
+
                         {/* File Dropzone */}
-                        <div className="border-2 border-dashed border-slate-200 hover:border-blue-400 transition-colors rounded-md p-6 text-center cursor-pointer bg-slate-50/50 hover:bg-slate-50">
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => attachmentInputRef.current?.click()}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              attachmentInputRef.current?.click();
+                            }
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            setIsDraggingAttachment(true);
+                          }}
+                          onDragLeave={() => setIsDraggingAttachment(false)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setIsDraggingAttachment(false);
+                            const file = e.dataTransfer.files?.[0] || null;
+                            if (file) {
+                              const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+                              const extOk = /\.(jpe?g|png|webp|pdf)$/i.test(file.name);
+                              if (!allowedTypes.includes(file.type) && !extOk) {
+                                toast.error('শুধুমাত্র JPG, PNG, WEBP বা PDF ফাইল আপলোড করা যাবে');
+                                return;
+                              }
+                              if (file.size > 5 * 1024 * 1024) {
+                                toast.error('ফাইলের সাইজ সর্বোচ্চ 5MB হতে পারবে');
+                                return;
+                              }
+                              setAttachmentFile(file);
+                              setRemoveExistingAttachment(false);
+                            }
+                          }}
+                          className={cn(
+                            "border-2 border-dashed transition-colors rounded-md p-6 text-center cursor-pointer",
+                            isDraggingAttachment
+                              ? "border-blue-500 bg-blue-50/70"
+                              : "border-slate-200 hover:border-blue-400 bg-slate-50/50 hover:bg-slate-50"
+                          )}
+                        >
                           <UploadCloud className="w-8 h-8 mx-auto text-blue-500 mb-2" />
-                          <p className="text-xs font-bold text-slate-700">ফাইল ড্রাপ করুন অথবা ক্লিক করে আপলোড করুন</p>
+                          <p className="text-xs font-bold text-slate-700">ফাইল ড্র্যাগ করুন অথবা ক্লিক করে আপলোড করুন</p>
                           <p className="text-[10px] text-slate-400 mt-1">সাপোর্টেড ফরম্যাট: JPG, PNG, PDF (সর্বোচ্চ 5MB)</p>
                         </div>
+
+                        {/* Selected New File Preview */}
+                        {attachmentFile && (
+                          <div className="flex items-center justify-between gap-3 p-3 rounded-md border border-blue-200 bg-blue-50/50">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <FileText className="w-5 h-5 text-blue-600 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-800 truncate">{attachmentFile.name}</p>
+                                <p className="text-[10px] text-slate-500">
+                                  {(attachmentFile.size / 1024).toFixed(1)} KB
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setAttachmentFile(null)}
+                              className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50 hover:text-rose-700 shrink-0"
+                              title="ফাইল সরান"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Existing Uploaded File (when editing) */}
+                        {!attachmentFile && existingAttachmentUrl && !removeExistingAttachment && (
+                          <div className="flex items-center justify-between gap-3 p-3 rounded-md border border-emerald-200 bg-emerald-50/50">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <FileText className="w-5 h-5 text-emerald-600 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-800">সংযুক্ত ফাইল রয়েছে</p>
+                                <a
+                                  href={existingAttachmentUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[11px] font-bold text-blue-600 hover:underline inline-flex items-center gap-1"
+                                >
+                                  <Eye className="w-3 h-3" /> ফাইল দেখুন
+                                </a>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setRemoveExistingAttachment(true)}
+                              className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50 hover:text-rose-700 shrink-0"
+                              title="সংযুক্ত ফাইল মুছুন"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
 
@@ -2946,7 +3132,17 @@ function TransactionsContent() {
               {/* Category / Source */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-slate-600">টাকা যোগের খাত / ধরন *</Label>
-                <Select value={addMoneyCategory} onValueChange={(val: string | null) => val && setAddMoneyCategory(val)}>
+                <Select
+                  value={addMoneyCategory}
+                  onValueChange={(val: string | null) => {
+                    if (val) {
+                      setAddMoneyCategory(val);
+                      if (!val.includes('মূলধন')) {
+                        setAddMoneyOwnerName('');
+                      }
+                    }
+                  }}
+                >
                   <SelectTrigger className="rounded-xl h-11 bg-slate-50/50 border-slate-200 text-xs font-bold">
                     <SelectValue />
                   </SelectTrigger>
@@ -2959,18 +3155,39 @@ function TransactionsContent() {
                 </Select>
               </div>
 
-              {/* Owner / Partner Name for Capital */}
+              {/* Owner / Partner Select for Capital Only */}
               {addMoneyCategory.includes('মূলধন') && (
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold text-slate-600">
-                    মালিক / অংশীদারের নাম (কার মূলধন)
+                    পার্টনার নির্বাচন করুন (কার মূলধন) *
                   </Label>
-                  <Input
-                    placeholder="যেমন: মোঃ রহিম / পার্টনার ১"
-                    value={addMoneyOwnerName}
-                    onChange={e => setAddMoneyOwnerName(e.target.value)}
-                    className="rounded-xl h-11 bg-slate-50/50 border-slate-200 text-xs font-bold"
-                  />
+                  {partners.length === 0 ? (
+                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center justify-between gap-2">
+                      <span>কোনো পার্টনার যোগ করা নেই।</span>
+                      <a
+                        href="/settings"
+                        className="text-indigo-700 font-bold underline hover:text-indigo-900 shrink-0"
+                      >
+                        সেটিংস থেকে যোগ করুন ➔
+                      </a>
+                    </div>
+                  ) : (
+                    <Select
+                      value={addMoneyOwnerName}
+                      onValueChange={(val: string | null) => setAddMoneyOwnerName(val || '')}
+                    >
+                      <SelectTrigger className="rounded-xl h-11 bg-slate-50/50 border-slate-200 text-xs font-bold">
+                        <SelectValue placeholder="পার্টনার নির্বাচন করুন..." />
+                      </SelectTrigger>
+                      <SelectContent className="font-bengali text-xs font-bold">
+                        {partners.map((p) => (
+                          <SelectItem key={p.id} value={p.name}>
+                            {p.name}{p.phone ? ` (${p.phone})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               )}
 

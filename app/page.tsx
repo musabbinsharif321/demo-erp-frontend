@@ -577,7 +577,22 @@ ${dayRodReturnKg > 0 ? `রড ফেরত = ${formatRodVal(dayRodReturnKg, tru
     }
   };
 
-  const netProfitVal = Math.max(0, totalMonthlySalesVal - totalMonthlyPurchasesVal);
+  const netProfitVal = useMemo(() => {
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+    let monthlyGrossProfit = 0;
+    allTransactions.forEach((t) => {
+      if ((t.transaction_type || '').toLowerCase() !== 'sale') return;
+      if (['pending', 'draft', 'cancelled', 'rejected'].includes((t.status || '').toLowerCase())) return;
+      if ((t.notes || '').includes('isHistoricalLedger')) return;
+      const d = getDate(t.created_at || t.createdAt);
+      if (d.getFullYear() === curYear && d.getMonth() === curMonth) {
+        monthlyGrossProfit += Number(t.profit || 0);
+      }
+    });
+    return Math.max(0, Math.round(monthlyGrossProfit));
+  }, [allTransactions]);
   const profitMarginPercent = totalMonthlySalesVal > 0 ? Math.min(100, Math.round((netProfitVal / totalMonthlySalesVal) * 100)) : 0;
 
   const weeklyData = useMemo(() => {

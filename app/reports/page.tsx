@@ -279,7 +279,11 @@ function MasterReportsContent() {
 
       // 2. Map Sales Orders
       const salesOrders: ReportOrder[] = safeTx
-        .filter((t: any) => t.transaction_type === 'sale' && t.status !== 'cancelled' && t.status !== 'rejected')
+        .filter((t: any) =>
+          t.transaction_type === 'sale' &&
+          !['pending', 'draft', 'cancelled', 'rejected'].includes((t.status || '').toLowerCase()) &&
+          !(t.notes || '').includes('isHistoricalLedger')
+        )
         .map((t: any) => {
           const items: ReportOrderItem[] = (t.items || []).map((i: any) => {
             let buyPrice = Number(i.buy_price || 0);
@@ -326,7 +330,11 @@ function MasterReportsContent() {
 
       // 3. Map Purchases
       const purchaseTx: ReportPurchase[] = safeTx
-        .filter((t: any) => t.transaction_type === 'purchase' && t.status !== 'cancelled' && t.status !== 'rejected')
+        .filter((t: any) =>
+          t.transaction_type === 'purchase' &&
+          !['pending', 'draft', 'cancelled', 'rejected'].includes((t.status || '').toLowerCase()) &&
+          !(t.notes || '').includes('isHistoricalLedger')
+        )
         .map((t: any) => ({
           id: String(t.id || t.invoice_no),
           invoiceNo: t.invoice_no || String(t.id || ''),
